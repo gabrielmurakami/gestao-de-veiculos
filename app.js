@@ -567,6 +567,7 @@ document.getElementById('btnSaveCar').addEventListener('click', () => {
   }
 
   rebuildCarSelector();
+  invalidateCarScreens(); // marca telas dependentes como sujas
   renderGarageScreen();
   hideCarForm();
 });
@@ -613,6 +614,7 @@ document.getElementById('carList').addEventListener('click', e => {
         DB.setSelectedCar(cars[0]?.id || null);
       }
       rebuildCarSelector();
+      invalidateCarScreens(); // marca telas dependentes como sujas
       renderGarageScreen();
       showToast('Veículo excluído.', 'info');
     });
