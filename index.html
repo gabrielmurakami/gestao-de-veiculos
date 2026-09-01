@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoGest — Gestão de Veículos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR / NAV LATERAL (desktop)
+  ═══════════════════════════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__brand">
+      <span class="brand-icon">⚡</span>
+      <span class="brand-name">AutoGest</span>
+    </div>
+
+    <nav class="sidebar__nav">
+      <button class="nav-item active" data-screen="dashboard">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        </span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+
+      <button class="nav-item" data-screen="garage">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </span>
+        <span class="nav-label">Garagem</span>
+      </button>
+
+      <button class="nav-item" data-screen="fuel">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 22V9l4-7h10l4 7v13H3z"/><path d="M3 13h18M9 13v9M15 13v9"/><path d="M16 5l3 4"/></svg>
+        </span>
+        <span class="nav-label">Abastecimento</span>
+      </button>
+
+      <button class="nav-item" data-screen="maintenance">
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        </span>
+        <span class="nav-label">Manutenção</span>
+      </button>
+    </nav>
+
+    <div class="sidebar__footer">
+      <span class="sidebar-version">v1.0.0</span>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════════
+       CONTEÚDO PRINCIPAL
+  ═══════════════════════════════════════════ -->
+  <main class="main-content">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar__left">
+        <button class="menu-toggle" id="menuToggle" aria-label="Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <h1 class="topbar__title" id="topbarTitle">Dashboard</h1>
+      </div>
+      <div class="topbar__right">
+        <div class="car-selector-wrap" id="carSelectorWrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v9a2 2 0 01-2 2h-2M9 21a2 2 0 100-4 2 2 0 000 4zM15 21a2 2 0 100-4 2 2 0 000 4z"/></svg>
+          <select class="car-selector" id="carSelector">
+            <option value="">Nenhum veículo</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <!-- ─── SCREEN: DASHBOARD ─────────────────── -->
+    <section class="screen active" id="screen-dashboard">
+
+      <!-- Empty state -->
+      <div class="empty-state" id="dashEmptyState" style="display:none">
+        <div class="empty-icon">🚗</div>
+        <h2>Nenhum veículo cadastrado</h2>
+        <p>Adicione seu primeiro veículo para começar a monitorar consumo e manutenções.</p>
+        <button class="btn btn--primary" data-screen="garage">Adicionar veículo</button>
+      </div>
+
+      <!-- Dashboard content -->
+      <div id="dashContent">
+        <!-- KPI row -->
+        <div class="kpi-row">
+          <div class="kpi-card kpi-card--highlight">
+            <span class="kpi-label">Consumo médio</span>
+            <div class="kpi-value" id="kpiAvgKml">— <span class="kpi-unit">km/l</span></div>
+            <span class="kpi-sub" id="kpiRefills">— abastecimentos registrados</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Última KM</span>
+            <div class="kpi-value kpi-value--sm" id="kpiLastOdo">—</div>
+            <span class="kpi-sub">km</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Último abastec.</span>
+            <div class="kpi-value kpi-value--sm" id="kpiLastFuel">—</div>
+            <span class="kpi-sub" id="kpiLastDate">—</span>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-card">
+          <div class="chart-card__header">
+            <h3>Histórico de consumo</h3>
+            <span class="badge" id="chartBadge">últimos registros</span>
+          </div>
+          <div class="chart-wrap" id="chartWrap">
+            <canvas id="consumoChart"></canvas>
+            <div class="chart-empty" id="chartEmpty">
+              <p>Registre ao menos 2 abastecimentos para ver o gráfico</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Maintenance cards -->
+        <div class="section-header">
+          <h3>Próximas manutenções</h3>
+          <button class="btn btn--ghost btn--sm" data-screen="maintenance">+ Nova</button>
+        </div>
+        <div class="maintenance-grid" id="maintenanceGrid">
+          <div class="maint-empty" id="maintEmpty">
+            <p>Nenhuma manutenção agendada. <button class="link-btn" data-screen="maintenance">Agendar agora</button></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SCREEN: GARAGEM ───────────────────── -->
+    <section class="screen" id="screen-garage">
+      <div class="section-header section-header--top">
+        <h3>Meus veículos</h3>
+        <button class="btn btn--primary btn--sm" id="btnShowCarForm">+ Adicionar</button>
+      </div>
+
+      <!-- Form -->
+      <div class="form-card" id="carFormCard" style="display:none">
+        <div class="form-card__header">
+          <h4 id="carFormTitle">Novo veículo</h4>
+          <button class="icon-btn" id="btnCloseCarForm" aria-label="Fechar">✕</button>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="carName">Apelido / Nome</label>
+            <input type="text" id="carName" placeholder="Ex: Civic do trabalho" maxlength="40" />
+          </div>
+          <div class="field">
+            <label for="carModel">Modelo</label>
+            <input type="text" id="carModel" placeholder="Ex: Honda Civic EXL" maxlength="50" />
+          </div>
+          <div class="field">
+            <label for="carYear">Ano</label>
+            <input type="number" id="carYear" placeholder="2022" min="1950" max="2030" />
+          </div>
+          <div class="field">
+            <label for="carPlate">Placa</label>
+            <input type="text" id="carPlate" placeholder="ABC-1234" maxlength="8" style="text-transform:uppercase" />
+          </div>
+          <div class="field">
+            <label for="carFuel">Combustível</label>
+            <select id="carFuel">
+              <option value="flex">Flex</option>
+              <option value="gasolina">Gasolina</option>
+              <option value="etanol">Etanol</option>
+              <option value="diesel">Diesel</option>
+              <option value="elétrico">Elétrico</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="carOdo">KM atual</label>
+            <input type="number" id="carOdo" placeholder="45000" min="0" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn--ghost" id="btnCancelCar">Cancelar</button>
+          <button class="btn btn--primary" id="btnSaveCar">Salvar veículo</button>
+        </div>
+      </div>
+
+      <!-- Car list -->
+      <div class="car-list" id="carList">
+        <div class="empty-state empty-state--sm" id="carEmptyState">
+          <div class="empty-icon">🏎️</div>
+          <p>Nenhum veículo cadastrado ainda.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SCREEN: ABASTECIMENTO ─────────────── -->
+    <section class="screen" id="screen-fuel">
+      <div class="section-header section-header--top">
+        <h3>Registrar abastecimento</h3>
+      </div>
+
+      <div class="no-car-warn" id="fuelNoCar" style="display:none">
+        <p>⚠️ Cadastre um veículo antes de registrar abastecimentos.</p>
+        <button class="btn btn--primary btn--sm" data-screen="garage">Ir para Garagem</button>
+      </div>
+
+      <div id="fuelFormWrap">
+        <div class="form-card">
+          <div class="fuel-car-context" id="fuelCarContext"></div>
+          <div class="form-grid">
+            <div class="field field--full">
+              <label for="fuelDate">Data</label>
+              <input type="date" id="fuelDate" />
+            </div>
+            <div class="field">
+              <label for="fuelOdo">KM atual</label>
+              <input type="number" id="fuelOdo" placeholder="48500" min="0" />
+            </div>
+            <div class="field">
+              <label for="fuelLiters">Litros</label>
+              <input type="number" id="fuelLiters" placeholder="40.5" min="0" step="0.01" />
+            </div>
+            <div class="field">
+              <label for="fuelPrice">Preço/litro (R$)</label>
+              <input type="number" id="fuelPrice" placeholder="5.89" min="0" step="0.01" />
+            </div>
+            <div class="field">
+              <label for="fuelStation">Posto (opcional)</label>
+              <input type="text" id="fuelStation" placeholder="Posto Ipiranga" maxlength="60" />
+            </div>
+          </div>
+
+          <!-- Instant calc preview -->
+          <div class="calc-preview" id="calcPreview" style="display:none">
+            <div class="calc-row">
+              <span>KM rodados</span>
+              <strong id="calcKmDriven">—</strong>
+            </div>
+            <div class="calc-row">
+              <span>Consumo este trecho</span>
+              <strong id="calcKml">— km/l</strong>
+            </div>
+            <div class="calc-row">
+              <span>Total gasto</span>
+              <strong id="calcTotal">R$ —</strong>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn--ghost" id="btnClearFuel">Limpar</button>
+            <button class="btn btn--primary" id="btnSaveFuel">Registrar</button>
+          </div>
+        </div>
+
+        <!-- Fuel history -->
+        <div class="section-header">
+          <h3>Histórico</h3>
+        </div>
+        <div id="fuelHistoryList">
+          <div class="empty-state empty-state--sm" id="fuelHistEmpty">
+            <p>Nenhum abastecimento registrado para este veículo.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── SCREEN: MANUTENÇÃO ────────────────── -->
+    <section class="screen" id="screen-maintenance">
+      <div class="section-header section-header--top">
+        <h3>Manutenções</h3>
+        <button class="btn btn--primary btn--sm" id="btnShowMaintForm">+ Agendar</button>
+      </div>
+
+      <div class="no-car-warn" id="maintNoCar" style="display:none">
+        <p>⚠️ Cadastre um veículo antes de agendar manutenções.</p>
+        <button class="btn btn--primary btn--sm" data-screen="garage">Ir para Garagem</button>
+      </div>
+
+      <!-- Form -->
+      <div class="form-card" id="maintFormCard" style="display:none">
+        <div class="form-card__header">
+          <h4>Nova manutenção</h4>
+          <button class="icon-btn" id="btnCloseMaintForm" aria-label="Fechar">✕</button>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="maintType">Tipo</label>
+            <select id="maintType">
+              <option value="Troca de óleo">Troca de óleo</option>
+              <option value="Revisão geral">Revisão geral</option>
+              <option value="Troca de pneus">Troca de pneus</option>
+              <option value="Troca de pastilha">Troca de pastilha de freio</option>
+              <option value="Filtro de ar">Filtro de ar</option>
+              <option value="Alinhamento/Balanceamento">Alinhamento e balanceamento</option>
+              <option value="Correia dentada">Correia dentada</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+          <div class="field" id="maintCustomWrap" style="display:none">
+            <label for="maintCustom">Descrição</label>
+            <input type="text" id="maintCustom" placeholder="Descreva a manutenção" />
+          </div>
+          <div class="field">
+            <label for="maintDate">Data prevista</label>
+            <input type="date" id="maintDate" />
+          </div>
+          <div class="field">
+            <label for="maintKm">KM prevista (opcional)</label>
+            <input type="number" id="maintKm" placeholder="50000" min="0" />
+          </div>
+          <div class="field field--full">
+            <label for="maintNotes">Observações</label>
+            <textarea id="maintNotes" rows="2" placeholder="Notas adicionais..."></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn--ghost" id="btnCancelMaint">Cancelar</button>
+          <button class="btn btn--primary" id="btnSaveMaint">Agendar</button>
+        </div>
+      </div>
+
+      <!-- Maintenance list -->
+      <div id="maintList">
+        <div class="empty-state empty-state--sm" id="maintListEmpty">
+          <p>Nenhuma manutenção agendada para este veículo.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bnav-item active" data-screen="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="bnav-item" data-screen="garage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Garagem</span>
+    </button>
+    <button class="bnav-item" data-screen="fuel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 22V9l4-7h10l4 7v13H3z"/><path d="M3 13h18"/></svg>
+      <span>Abastec.</span>
+    </button>
+    <button class="bnav-item" data-screen="maintenance">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      <span>Manutenção</span>
+    </button>
+  </nav>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- CONFIRM MODAL -->
+  <div class="modal-overlay" id="modalOverlay" style="display:none">
+    <div class="modal">
+      <h4 id="modalTitle">Confirmar ação</h4>
+      <p id="modalMessage">Tem certeza?</p>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" id="modalCancel">Cancelar</button>
+        <button class="btn btn--danger" id="modalConfirm">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
