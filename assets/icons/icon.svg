@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0A1520"/>
+
+  <!-- Subtle grid pattern -->
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#1E3048" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#grid)" opacity="0.3"/>
+
+  <!-- Car silhouette (main icon) -->
+  <g transform="translate(64, 120) scale(1.8)">
+    <!-- Car body -->
+    <path d="M40 80 L40 50 Q40 30 55 30 L105 30 Q120 30 120 45 L120 80 Z" fill="#1D2F42" stroke="#3B82F6" stroke-width="3"/>
+
+    <!-- Windows -->
+    <path d="M50 40 L50 55 L70 55 L70 40 Z" fill="#243650" stroke="#3B82F6" stroke-width="1"/>
+    <path d="M75 40 L75 55 L95 55 L95 40 Z" fill="#243650" stroke="#3B82F6" stroke-width="1"/>
+
+    <!-- Wheels -->
+    <circle cx="55" cy="85" r="15" fill="#0A1520" stroke="#3B82F6" stroke-width="3"/>
+    <circle cx="55" cy="85" r="8" fill="#3B82F6" opacity="0.3"/>
+    <circle cx="105" cy="85" r="15" fill="#0A1520" stroke="#3B82F6" stroke-width="3"/>
+    <circle cx="105" cy="85" r="8" fill="#3B82F6" opacity="0.3"/>
+
+    <!-- Headlight -->
+    <ellipse cx="118" cy="55" rx="5" ry="8" fill="#F59E0B" opacity="0.9"/>
+
+    <!-- Taillight -->
+    <ellipse cx="37" cy="55" rx="5" ry="8" fill="#EF4444" opacity="0.9"/>
+  </g>
+
+  <!-- Speed/consumption indicator -->
+  <g transform="translate(320, 300) scale(0.8)">
+    <!-- Gauge background -->
+    <path d="M100 60 A60 60 0 0 1 220 60" fill="none" stroke="#1E3048" stroke-width="16" stroke-linecap="round"/>
+    <path d="M100 60 A60 60 0 0 1 220 60" fill="none" stroke="#3B82F6" stroke-width="16" stroke-linecap="round" stroke-dasharray="75 188"/>
+
+    <!-- Needle -->
+    <line x1="160" y1="60" x2="160" y2="20" stroke="#10B981" stroke-width="4" stroke-linecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="-90 160 60" to="60 160 60" dur="2s" repeatCount="indefinite" fill="freeze"/>
+    </line>
+
+    <!-- Center dot -->
+    <circle cx="160" cy="60" r="8" fill="#0A1520" stroke="#10B981" stroke-width="3"/>
+  </g>
+
+  <!-- Fuel drop accent -->
+  <g transform="translate(420, 180) scale(0.6)">
+    <path d="M32 8 C32 8 48 -4 64 8 C80 20 64 48 64 48 C64 48 48 20 32 8 Z" fill="#3B82F6" opacity="0.8"/>
+    <circle cx="48" cy="18" r="6" fill="#3B82F6" opacity="0.4"/>
+  </g>
+
+  <!-- Wrench icon (maintenance) -->
+  <g transform="translate(80, 380) scale(0.7)">
+    <path d="M20 80 L40 60 L90 10 L110 30 L70 70 L50 90 Z" fill="#243650" stroke="#F59E0B" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="110" cy="10" r="8" fill="#F59E0B" opacity="0.3"/>
+    <circle cx="10" cy="90" r="8" fill="#F59E0B" opacity="0.3"/>
+    <rect x="90" y="-10" width="25" height="25" rx="3" fill="#F59E0B" opacity="0.2"/>
+  </g>
+
+  <!-- Version badge -->
+  <text x="256" y="480" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#3B82F6" text-anchor="middle" opacity="0.6">v1.0</text>
+</svg>

@@ -922,5 +922,18 @@ function seedDemoData() {
   renderDashboard();
 }
 
+// Service Worker Registration (PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => {
+        console.log('[PWA] Service Worker registrado:', reg.scope);
+        // Verifica updates periodicamente
+        setInterval(() => reg.update(), 1000 * 60 * 60); // a cada 1h
+      })
+      .catch(err => console.warn('[PWA] Falha ao registrar SW:', err));
+  });
+}
+
 // Start!
 init();
