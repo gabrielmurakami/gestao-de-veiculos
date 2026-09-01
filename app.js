@@ -107,18 +107,25 @@ const SCREEN_TITLES = {
   maintenance: 'Manutenções',
 };
 let currentScreen = 'dashboard';
+let lastScreenEl = null; // cache reference to last active screen
 
 function navigateTo(screenId) {
   if (currentScreen === screenId) return;
   currentScreen = screenId;
 
-  // Screens
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  // Screens - use cached reference for instant toggle
+  if (lastScreenEl) lastScreenEl.classList.remove('active');
   const target = document.getElementById(`screen-${screenId}`);
-  if (target) target.classList.add('active');
+  if (target) {
+    target.classList.add('active');
+    lastScreenEl = target;
+  }
 
-  // Nav items (sidebar + bottom)
-  document.querySelectorAll('.nav-item, .bnav-item').forEach(btn => {
+  // Nav items (sidebar + bottom) - cached selectors
+  if (!navigateTo.navItems) {
+    navigateTo.navItems = document.querySelectorAll('.nav-item, .bnav-item');
+  }
+  navigateTo.navItems.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.screen === screenId);
   });
 
@@ -372,30 +379,39 @@ function renderDashboardMaint(maints, car) {
   const grid  = document.getElementById('maintenanceGrid');
   const empty = document.getElementById('maintEmpty');
 
-  // Filter only upcoming or near (not resolved)
+  // Filter only upcoming or near (not resolved) — sort by ISO date string (no new Date needed)
   const pending = maints.filter(m => !m.resolved)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 6);
 
   if (pending.length === 0) {
     empty.style.display = 'block';
-    // Remove old cards
-    grid.querySelectorAll('.maint-card').forEach(c => c.remove());
+    grid.innerHTML = ''; // single DOM operation
     return;
   }
   empty.style.display = 'none';
-  grid.querySelectorAll('.maint-card').forEach(c => c.remove());
 
   const now = new Date();
-  pending.forEach(m => {
-    const dDate = new Date(m.date + 'T00:00:00');
-    const diff = Math.ceil((dDate - now) / 864e5); // days
+  const todayStr = now.toISOString().split('T')[0]; // 'YYYY-MM-DD' string compare
 
+  const frag = document.createDocumentFragment();
+  pending.forEach(m => {
     let cls = 'maint-card--ok';
     let status = 'Em dia';
-    if (diff < 0)    { cls = 'maint-card--urgent'; status = 'Vencida'; }
-    else if (diff <= 7) { cls = 'maint-card--urgent'; status = `Vence em ${diff}d`; }
-    else if (diff <= 30) { cls = 'maint-card--upcoming'; status = `Em ${diff} dias`; }
+    // Compare ISO date strings directly (no new Date in loop)
+    if (m.date < todayStr) {
+      // Vencida
+      const d = new Date(m.date + 'T00:00:00'); // only compute diff when needed
+      const diff = Math.ceil((d - now) / 864e5);
+      cls = 'maint-card--urgent';
+      status = diff < 0 ? 'Vencida' : `Vence em ${diff}d`;
+    } else if (m.date <= addDays(todayStr, 7)) {
+      cls = 'maint-card--urgent';
+      status = `Vence em ${daysUntil(m.date)}d`;
+    } else if (m.date <= addDays(todayStr, 30)) {
+      cls = 'maint-card--upcoming';
+      status = `Em ${daysUntil(m.date)} dias`;
+    }
 
     const card = document.createElement('div');
     card.className = `maint-card ${cls}`;
@@ -406,8 +422,22 @@ function renderDashboardMaint(maints, car) {
       ${m.km ? `<div class="maint-card__km">🔢 ${parseInt(m.km).toLocaleString('pt-BR')} km</div>` : ''}
       <div class="maint-card__status">${status}</div>
     `;
-    grid.appendChild(card);
+    frag.appendChild(card);
   });
+  grid.innerHTML = '';
+  grid.appendChild(frag);
+}
+
+// Helpers for date string math (no new Date in hot path)
+function addDays(isoStr, days) {
+  const d = new Date(isoStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+function daysUntil(isoStr) {
+  const d = new Date(isoStr + 'T00:00:00');
+  const now = new Date();
+  return Math.ceil((d - now) / 864e5);
 }
 
 /* ═══════════════════════════════
@@ -421,15 +451,14 @@ function renderGarageScreen() {
   const emptyEl  = document.getElementById('carEmptyState');
   const selectedId = DB.getSelectedCar();
 
-  // Clear existing car cards
-  list.querySelectorAll('.car-card').forEach(c => c.remove());
-
   if (cars.length === 0) {
+    list.innerHTML = ''; // single DOM operation
     emptyEl.style.display = 'flex';
     return;
   }
   emptyEl.style.display = 'none';
 
+  const frag = document.createDocumentFragment();
   cars.forEach(car => {
     const fuels = DB.getFuelsForCar(car.id);
     const avg   = calcAvgKml(fuels);
@@ -451,8 +480,10 @@ function renderGarageScreen() {
         <button class="icon-btn" data-action="delete" data-id="${car.id}" title="Excluir">🗑️</button>
       </div>
     `;
-    list.appendChild(card);
+    frag.appendChild(card);
   });
+  list.innerHTML = '';
+  list.appendChild(frag);
 }
 
 // Show/hide car form
@@ -600,9 +631,8 @@ function renderFuelHistory(carId, fuels) {
   const emptyEl   = document.getElementById('fuelHistEmpty');
   const sorted    = [...fuels].sort((a,b) => b.odometer - a.odometer); // newest first
 
-  list.querySelectorAll('.fuel-history-item').forEach(el => el.remove());
-
   if (sorted.length === 0) {
+    list.innerHTML = '';
     emptyEl.style.display = 'block';
     return;
   }
@@ -610,8 +640,8 @@ function renderFuelHistory(carId, fuels) {
 
   const allSorted = [...fuels].sort((a,b) => a.odometer - b.odometer);
 
-  sorted.forEach((f, idx) => {
-    // find prev in ascending order
+  const frag = document.createDocumentFragment();
+  sorted.forEach(f => {
     const ascIdx = allSorted.findIndex(x => x.id === f.id);
     const prev   = ascIdx > 0 ? allSorted[ascIdx - 1] : null;
     const kml    = calcKml(prev, f);
@@ -635,8 +665,10 @@ function renderFuelHistory(carId, fuels) {
       </div>
       <button class="icon-btn" data-action="deletefuel" data-id="${f.id}" title="Excluir">🗑️</button>
     `;
-    list.appendChild(item);
+    frag.appendChild(item);
   });
+  list.innerHTML = '';
+  list.appendChild(frag);
 }
 
 // Live calculation preview
@@ -752,27 +784,38 @@ function renderMaintScreen() {
   list.style.display  = 'block';
 
   const maints = DB.getMaintsForCar(car.id)
-    .sort((a,b) => new Date(a.date) - new Date(b.date));
-
-  list.querySelectorAll('.maint-list-item').forEach(el => el.remove());
+    .sort((a,b) => a.date.localeCompare(b.date)); // ISO string compare
 
   if (maints.length === 0) {
+    list.innerHTML = '';
     emptyEl.style.display = 'flex';
     return;
   }
   emptyEl.style.display = 'none';
 
   const now = new Date();
-  maints.forEach(m => {
-    const dDate = new Date(m.date + 'T00:00:00');
-    const diff  = Math.ceil((dDate - now) / 864e5);
+  const todayStr = now.toISOString().split('T')[0];
+  const in7 = addDays(todayStr, 7);
+  const in30 = addDays(todayStr, 30);
 
+  const frag = document.createDocumentFragment();
+  maints.forEach(m => {
     let stripeColor = 'var(--accent-green)';
     let statusLabel = 'Agendado';
-    if (m.resolved)    { stripeColor = 'var(--text-muted)'; statusLabel = '✔ Concluído'; }
-    else if (diff < 0) { stripeColor = 'var(--accent-red)'; statusLabel = '⚠ Vencida'; }
-    else if (diff <= 7){ stripeColor = 'var(--accent-red)'; statusLabel = `Faltam ${diff}d`; }
-    else if (diff <= 30){ stripeColor = 'var(--accent-amber)'; statusLabel = `Em ${diff} dias`; }
+
+    if (m.resolved) {
+      stripeColor = 'var(--text-muted)';
+      statusLabel = '✔ Concluído';
+    } else if (m.date < todayStr) {
+      stripeColor = 'var(--accent-red)';
+      statusLabel = '⚠ Vencida';
+    } else if (m.date <= in7) {
+      stripeColor = 'var(--accent-red)';
+      statusLabel = `Faltam ${daysUntil(m.date)}d`;
+    } else if (m.date <= in30) {
+      stripeColor = 'var(--accent-amber)';
+      statusLabel = `Em ${daysUntil(m.date)} dias`;
+    }
 
     const item = document.createElement('div');
     item.className = 'maint-list-item';
@@ -792,8 +835,10 @@ function renderMaintScreen() {
         <button class="icon-btn" data-action="deletemaint" data-id="${m.id}" title="Excluir">🗑️</button>
       </div>
     `;
-    list.appendChild(item);
+    frag.appendChild(item);
   });
+  list.innerHTML = '';
+  list.appendChild(frag);
 }
 
 // Show maint form
@@ -930,6 +975,17 @@ if ('serviceWorker' in navigator) {
         console.log('[PWA] Service Worker registrado:', reg.scope);
         // Verifica updates periodicamente
         setInterval(() => reg.update(), 1000 * 60 * 60); // a cada 1h
+
+        // Notificar usuário quando houver update
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              showToast('Nova versão disponível. Recarregue para atualizar.', 'info', 10000);
+            }
+          });
+        });
       })
       .catch(err => console.warn('[PWA] Falha ao registrar SW:', err));
   });

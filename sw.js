@@ -4,9 +4,10 @@
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_NAME = 'autogest-v1';
-const CACHE_STATIC = 'autogest-static-v1';
-const CACHE_CDN = 'autogest-cdn-v1';
+const CACHE_VERSION = 'v2';
+const CACHE_NAME = `autogest-${CACHE_VERSION}`;
+const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
+const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;
 
 // Arquivos locais que devem ser cacheados imediatamente
 const STATIC_ASSETS = [
