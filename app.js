@@ -8,33 +8,47 @@
 'use strict';
 
 /* ═══════════════════════════════
-   STORAGE LAYER
+   STORAGE LAYER — COM CACHE EM MEMÓRIA
 ═══════════════════════════════ */
 const DB = {
   KEYS: { cars: 'ag_cars', fuels: 'ag_fuels', maints: 'ag_maints', selected: 'ag_selected' },
 
-  get(key) {
-    try { return JSON.parse(localStorage.getItem(key)) || []; }
-    catch { return []; }
-  },
-  getOne(key) {
-    try { return JSON.parse(localStorage.getItem(key)); }
-    catch { return null; }
-  },
-  set(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)); }
-    catch { showToast('Erro ao salvar dados.', 'error'); }
+  // Cache em memória para evitar JSON.parse repetido
+  _cache: { cars: null, fuels: null, maints: null, selected: null },
+  _loaded: { cars: false, fuels: false, maints: false, selected: false },
+
+  _load(key) {
+    if (this._loaded[key]) return this._cache[key];
+    try {
+      const val = JSON.parse(localStorage.getItem(this.KEYS[key])) || (key === 'selected' ? null : []);
+      this._cache[key] = val;
+      this._loaded[key] = true;
+      return val;
+    } catch {
+      this._cache[key] = key === 'selected' ? null : [];
+      this._loaded[key] = true;
+      return this._cache[key];
+    }
   },
 
-  getCars()    { return this.get(this.KEYS.cars); },
-  saveCars(d)  { this.set(this.KEYS.cars, d); },
-  getFuels()   { return this.get(this.KEYS.fuels); },
-  saveFuels(d) { this.set(this.KEYS.fuels, d); },
-  getMaints()  { return this.get(this.KEYS.maints); },
-  saveMaints(d){ this.set(this.KEYS.maints, d); },
+  _save(key, val) {
+    try {
+      localStorage.setItem(this.KEYS[key], JSON.stringify(val));
+      this._cache[key] = val;
+    } catch { showToast('Erro ao salvar dados.', 'error'); }
+  },
 
-  getSelectedCar()  { return this.getOne(this.KEYS.selected); },
-  setSelectedCar(id){ this.set(this.KEYS.selected, id); },
+  invalidate(key) { this._loaded[key] = false; },
+
+  getCars()    { return this._load('cars'); },
+  saveCars(d)  { this._save('cars', d); },
+  getFuels()   { return this._load('fuels'); },
+  saveFuels(d) { this._save('fuels', d); },
+  getMaints()  { return this._load('maints'); },
+  saveMaints(d){ this._save('maints', d); },
+
+  getSelectedCar()  { return this._load('selected'); },
+  setSelectedCar(id){ this._save('selected', id); },
 
   getFuelsForCar(cid)  { return this.getFuels().filter(f => f.carId === cid); },
   getMaintsForCar(cid) { return this.getMaints().filter(m => m.carId === cid); },
