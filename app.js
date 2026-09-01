@@ -112,7 +112,7 @@ document.getElementById('modalCancel').addEventListener('click', () => {
 });
 
 /* ═══════════════════════════════
-   NAVIGATION — SCREEN SWITCHING
+   NAVIGATION — SCREEN SWITCHING (LAZY RENDER + DIRTY FLAGS)
 ═══════════════════════════════ */
 const SCREEN_TITLES = {
   dashboard:   'Dashboard',
@@ -120,14 +120,32 @@ const SCREEN_TITLES = {
   fuel:        'Abastecimento',
   maintenance: 'Manutenções',
 };
+
+// Estado de renderização por tela (evita re-render desnecessário)
+const renderState = {
+  dashboard:   { dirty: true,  rendered: false },
+  garage:      { dirty: true,  rendered: false },
+  fuel:        { dirty: true,  rendered: false },
+  maintenance: { dirty: true,  rendered: false },
+};
+
 let currentScreen = 'dashboard';
-let lastScreenEl = null; // cache reference to last active screen
+let lastScreenEl = null;
+
+function markDirty(screenId) {
+  if (renderState[screenId]) renderState[screenId].dirty = true;
+}
+
+// Invalida todas as telas que dependem de um carro
+function invalidateCarScreens() {
+  ['dashboard', 'fuel', 'maintenance'].forEach(s => markDirty(s));
+}
 
 function navigateTo(screenId) {
   if (currentScreen === screenId) return;
   currentScreen = screenId;
 
-  // Screens - use cached reference for instant toggle
+  // Instant visual toggle (no layout thrash)
   if (lastScreenEl) lastScreenEl.classList.remove('active');
   const target = document.getElementById(`screen-${screenId}`);
   if (target) {
@@ -135,7 +153,7 @@ function navigateTo(screenId) {
     lastScreenEl = target;
   }
 
-  // Nav items (sidebar + bottom) - cached selectors
+  // Nav items - cached selectors
   if (!navigateTo.navItems) {
     navigateTo.navItems = document.querySelectorAll('.nav-item, .bnav-item');
   }
@@ -143,17 +161,18 @@ function navigateTo(screenId) {
     btn.classList.toggle('active', btn.dataset.screen === screenId);
   });
 
-  // Topbar title
   document.getElementById('topbarTitle').textContent = SCREEN_TITLES[screenId] || screenId;
 
-  // Render relevant screen
-  if (screenId === 'dashboard')   renderDashboard();
-  if (screenId === 'fuel')        renderFuelScreen();
-  if (screenId === 'maintenance') renderMaintScreen();
-  if (screenId === 'garage')      renderGarageScreen();
-
-  // Close sidebar on mobile - Desativado para PWA (sem menu sanduíche)
-  // closeSidebar();
+  // LAZY RENDER: só renderiza se sujo ou primeira vez
+  const state = renderState[screenId];
+  if (state && (state.dirty || !state.rendered)) {
+    if (screenId === 'dashboard')   renderDashboard();
+    if (screenId === 'fuel')        renderFuelScreen();
+    if (screenId === 'maintenance') renderMaintScreen();
+    if (screenId === 'garage')      renderGarageScreen();
+    state.dirty = false;
+    state.rendered = true;
+  }
 }
 
 // Wire nav buttons (delegated)
