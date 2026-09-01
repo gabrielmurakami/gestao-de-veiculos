@@ -97,9 +97,9 @@ ul { list-style: none; }
   display: flex;
   flex-direction: column;
   position: fixed;
-  top: 0;
+  top: 62px;
   left: 0;
-  height: 100dvh;
+  height: calc(100dvh - 62px);
   z-index: 200;
   transition: transform .3s cubic-bezier(.4,0,.2,1);
 }
@@ -168,6 +168,7 @@ ul { list-style: none; }
   flex-direction: column;
   min-height: 100dvh;
   max-width: 100%;
+  padding-top: 62px; /* altura do topbar fixo */
 }
 
 /* ── TOPBAR ─────────────────────────────────────── */
@@ -178,10 +179,13 @@ ul { list-style: none; }
   padding: 14px 20px;
   background: var(--bg-base);
   border-bottom: 1px solid var(--border);
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 100;
+  left: 0;
+  right: 0;
+  z-index: 150;
   gap: 12px;
+  box-shadow: var(--shadow-card);
 }
 .topbar__left { display: flex; align-items: center; gap: 12px; }
 .topbar__title {
@@ -784,6 +788,8 @@ ul { list-style: none; }
 @media (max-width: 768px) {
   .sidebar {
     transform: translateX(-100%);
+    top: 56px;
+    height: calc(100dvh - 56px);
   }
   .sidebar.sidebar--open {
     transform: translateX(0);
@@ -795,6 +801,7 @@ ul { list-style: none; }
   .main-content {
     margin-left: 0;
     padding-bottom: 0;
+    padding-top: 56px; /* topbar fixo mobile */
   }
 
   .bottom-nav { display: flex; }
@@ -835,4 +842,8 @@ ul { list-style: none; }
 @media (min-width: 769px) and (max-width: 1024px) {
   :root { --sidebar-w: 200px; }
   .kpi-row { grid-template-columns: 1fr 1fr 1fr; }
+  .sidebar {
+    top: 62px;
+    height: calc(100dvh - 62px);
+  }
 }
