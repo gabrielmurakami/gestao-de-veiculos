@@ -796,7 +796,7 @@ ul { list-style: none; }
     box-shadow: var(--shadow-float);
   }
 
-  .menu-toggle { display: flex; }
+  .menu-toggle { display: none; /* Esconde menu sandwich mobile/PWA */ }
 
   .main-content {
     margin-left: 0;
@@ -836,7 +836,7 @@ ul { list-style: none; }
   background: rgba(0,0,0,.5);
   z-index: 190;
 }
-.sidebar-overlay.active { display: block; }
+.sidebar-overlay.active { display: none; /* No overlay when burger menu is disabled */ }
 
 /* ── TABLET mid-range ───────────────────────────── */
 @media (min-width: 769px) and (max-width: 1024px) {

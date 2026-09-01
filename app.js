@@ -138,8 +138,8 @@ function navigateTo(screenId) {
   if (screenId === 'maintenance') renderMaintScreen();
   if (screenId === 'garage')      renderGarageScreen();
 
-  // Close sidebar on mobile
-  closeSidebar();
+  // Close sidebar on mobile - Desativado para PWA (sem menu sanduíche)
+  // closeSidebar();
 }
 
 // Wire nav buttons (delegated)
@@ -149,29 +149,21 @@ document.body.addEventListener('click', e => {
 });
 
 /* ═══════════════════════════════
-   SIDEBAR TOGGLE (mobile)
+   SIDEBAR TOGGLE (mobile) — DESATIVADO PARA PWA
+   Menu hambúrguer removido, apenas bottom nav
 ═══════════════════════════════ */
 const sidebar = document.getElementById('sidebar');
-let overlay = null;
+// let overlay = null; // Não usado sem hambúrguer
 
-function openSidebar() {
-  sidebar.classList.add('sidebar--open');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.className = 'sidebar-overlay active';
-    overlay.addEventListener('click', closeSidebar);
-    document.body.appendChild(overlay);
-  } else {
-    overlay.classList.add('active');
-  }
-}
-function closeSidebar() {
-  sidebar.classList.remove('sidebar--open');
-  if (overlay) overlay.classList.remove('active');
-}
+// function openSidebar() { ... } // Desativado
+// function closeSidebar() { ... } // Desativado
+
+// Menu toggle desativado para PWA (sem hambúrguer)
+/*
 document.getElementById('menuToggle').addEventListener('click', () => {
   sidebar.classList.contains('sidebar--open') ? closeSidebar() : openSidebar();
 });
+*/
 
 /* ═══════════════════════════════
    CAR SELECTOR (global)
