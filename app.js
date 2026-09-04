@@ -122,16 +122,15 @@ const SCREEN_TITLES = {
 };
 
 // Estado de renderização por tela (evita re-render desnecessário)
-// Dashboard já é renderizado no init()
 const renderState = {
-  dashboard:   { dirty: false, rendered: true },
+  dashboard:   { dirty: true,  rendered: false },
   garage:      { dirty: true,  rendered: false },
   fuel:        { dirty: true,  rendered: false },
   maintenance: { dirty: true,  rendered: false },
 };
 
 let currentScreen = 'dashboard';
-let lastScreenEl = null; // será inicializado no init()
+let lastScreenEl = null;
 
 function markDirty(screenId) {
   if (renderState[screenId]) renderState[screenId].dirty = true;
@@ -146,10 +145,8 @@ function navigateTo(screenId) {
   if (currentScreen === screenId) return;
   currentScreen = screenId;
 
-  // GARANTIA: remove active de TODAS as screens antes de adicionar na alvo
-  // Isso evita o bug de duas telas visíveis na primeira navegação
-  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-
+  // Instant visual toggle (no layout thrash)
+  if (lastScreenEl) lastScreenEl.classList.remove('active');
   const target = document.getElementById(`screen-${screenId}`);
   if (target) {
     target.classList.add('active');
@@ -1090,12 +1087,15 @@ function init() {
   rebuildCarSelector();
   renderDashboard();
 
+<<<<<<< HEAD
   // define lastScreenEl now that the dashboard is rendered
   lastScreenEl = document.getElementById('screen-dashboard');
 
   // Initialize pull-to-refresh on mobile
   initPullToRefresh();
 
+=======
+>>>>>>> parent of 3c6a018 (Update app.js)
   // Seed demo data if first run
   if (DB.getCars().length === 0 && !localStorage.getItem('ag_seeded')) {
     seedDemoData();
