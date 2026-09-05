@@ -847,3 +847,77 @@ ul { list-style: none; }
     height: calc(100dvh - 62px);
   }
 }
+
+/* ══════════════════════════════════════════════════
+   PULL TO REFRESH (mobile)
+═══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .ptr-wrapper {
+    position: relative;
+    overflow: hidden;
+    flex: 1;
+    min-height: 100%;
+  }
+
+  .ptr-indicator {
+    position: absolute;
+    top: -60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    opacity: 0;
+    transition: opacity 0.2s ease, top 0.2s ease;
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  .ptr-indicator.visible {
+    opacity: 1;
+    top: 20px;
+  }
+
+  .ptr-indicator.pulling {
+    top: 50px;
+  }
+
+  .ptr-indicator.refreshing {
+    top: 20px;
+    animation: ptr-spin 1s linear infinite;
+  }
+
+  .ptr-indicator svg {
+    width: 24px;
+    height: 24px;
+    color: var(--accent-blue);
+    transition: transform 0.2s ease;
+  }
+
+  .ptr-indicator.pulling svg {
+    transform: rotate(180deg);
+  }
+
+  .ptr-indicator.refreshing svg {
+    animation: ptr-spin 1s linear infinite;
+  }
+
+  @keyframes ptr-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .ptr-content {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ptr-content.pulling {
+    transform: translateY(60px);
+  }
+}

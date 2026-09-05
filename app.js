@@ -943,24 +943,164 @@ document.getElementById('maintList').addEventListener('click', e => {
 });
 
 /* ═══════════════════════════════
+   PULL TO REFRESH (mobile)
+═══════════════════════════════ */
+let ptrState = {
+  startY: 0,
+  currentY: 0,
+  pulling: false,
+  refreshing: false,
+  threshold: 80,
+  maxPull: 120,
+};
+
+const ptrWrapper = document.getElementById('ptrWrapper');
+const ptrIndicator = document.getElementById('ptrIndicator');
+const ptrContent = document.getElementById('ptrContent');
+
+function initPullToRefresh() {
+  // Only enable on mobile
+  if (window.innerWidth > 768) return;
+
+  // Touch start
+  ptrWrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
+  // Touch move
+  ptrWrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
+  // Touch end
+  ptrWrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
+}
+
+function handleTouchStart(e) {
+  if (ptrState.refreshing) return;
+
+  // Only allow pull-to-refresh when at the top of the scroll
+  const scrollTop = window.scrollY || document.documentElement.scrollTop;
+  if (scrollTop > 0) return;
+
+  ptrState.startY = e.touches[0].clientY;
+  ptrState.pulling = true;
+}
+
+function handleTouchMove(e) {
+  if (!ptrState.pulling || ptrState.refreshing) return;
+
+  ptrState.currentY = e.touches[0].clientY;
+  const deltaY = ptrState.currentY - ptrState.startY;
+
+  // Only pull down (positive delta)
+  if (deltaY <= 0) {
+    resetPullState();
+    return;
+  }
+
+  // Prevent default scrolling when pulling
+  e.preventDefault();
+
+  // Calculate pull distance with resistance
+  let pullDistance = Math.min(deltaY * 0.5, ptrState.maxPull);
+
+  // Update indicator
+  ptrIndicator.classList.add('visible');
+  if (pullDistance >= ptrState.threshold) {
+    ptrIndicator.classList.add('pulling');
+  } else {
+    ptrIndicator.classList.remove('pulling');
+  }
+
+  // Move content
+  ptrContent.style.transform = `translateY(${pullDistance}px)`;
+  ptrContent.classList.add('pulling');
+}
+
+function handleTouchEnd(e) {
+  if (!ptrState.pulling || ptrState.refreshing) return;
+
+  const deltaY = ptrState.currentY - ptrState.startY;
+
+  if (deltaY >= ptrState.threshold) {
+    // Trigger refresh
+    triggerRefresh();
+  } else {
+    // Reset smoothly
+    resetPullState();
+  }
+}
+
+function triggerRefresh() {
+  ptrState.refreshing = true;
+  ptrState.pulling = false;
+
+  ptrIndicator.classList.remove('pulling');
+  ptrIndicator.classList.add('refreshing');
+  ptrContent.style.transform = 'translateY(60px)';
+
+  showToast('Atualizando...', 'info', 2000);
+
+  // Simulate async refresh - in real app, this would fetch new data
+  setTimeout(() => {
+    // Invalidate all caches and re-render current screen
+    ['cars', 'fuels', 'maints', 'selected'].forEach(key => DB.invalidate(key));
+    rebuildCarSelector();
+    renderCurrentScreen();
+    showToast('Dados atualizados!', 'success', 2000);
+
+    finishRefresh();
+  }, 1000);
+}
+
+function finishRefresh() {
+  ptrState.refreshing = false;
+
+  ptrIndicator.classList.remove('refreshing', 'visible');
+  ptrContent.style.transform = 'translateY(0)';
+  ptrContent.classList.remove('pulling');
+
+  // Reset state
+  ptrState.startY = 0;
+  ptrState.currentY = 0;
+}
+
+function resetPullState() {
+  ptrState.pulling = false;
+  ptrState.startY = 0;
+  ptrState.currentY = 0;
+
+  ptrIndicator.classList.remove('pulling', 'visible');
+  ptrContent.style.transform = 'translateY(0)';
+  ptrContent.classList.remove('pulling');
+}
+
+// Re-init on resize (mobile/desktop switch)
+let ptrInitialized = false;
+window.addEventListener('resize', () => {
+  if (window.innerWidth <= 768) {
+    if (!ptrInitialized) {
+      initPullToRefresh();
+      ptrInitialized = true;
+    }
+  } else {
+    // Clean up on desktop
+    resetPullState();
+    ptrInitialized = false;
+  }
+});
+
+/* ═══════════════════════════════
    INIT
 ═══════════════════════════════ */
 function init() {
   rebuildCarSelector();
   renderDashboard();
 
-<<<<<<< HEAD
   // define lastScreenEl now that the dashboard is rendered
   lastScreenEl = document.getElementById('screen-dashboard');
 
-<<<<<<< HEAD
   // Initialize pull-to-refresh on mobile
-  initPullToRefresh();
+  if (window.innerWidth <= 768) {
+    initPullToRefresh();
+    ptrInitialized = true;
+  }
 
-=======
->>>>>>> parent of 3c6a018 (Update app.js)
-=======
->>>>>>> parent of e8626b4 (pull-to-refresh)
   // Seed demo data if first run
   if (DB.getCars().length === 0 && !localStorage.getItem('ag_seeded')) {
     seedDemoData();
