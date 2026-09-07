@@ -4,19 +4,28 @@
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `autogest-${CACHE_VERSION}`;
 const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
 const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;
 
-// Arquivos locais que devem ser cacheados imediatamente
+// Arquivos locais que devem ser cacheados imediatamente (caminhos absolutos a partir da raiz)
 const STATIC_ASSETS = [
-  './',
-  './index.html',
-  './app.js',
-  './style.css',
-  './manifest.json',
-  './chart.umd.min.js',
+  '/',
+  '/index.html',
+  '/app.js',
+  '/style.css',
+  '/manifest.json',
+  '/chart.umd.min.js',
+  '/assets/icons/icon-72.png',
+  '/assets/icons/icon-96.png',
+  '/assets/icons/icon-128.png',
+  '/assets/icons/icon-144.png',
+  '/assets/icons/icon-152.png',
+  '/assets/icons/icon-192.png',
+  '/assets/icons/icon-384.png',
+  '/assets/icons/icon-512.png',
+  '/assets/icons/icon.svg',
 ];
 
 // Recursos externos (CDN) - cache com network-first (apenas fontes Google)
@@ -80,10 +89,20 @@ self.addEventListener('fetch', (event) => {
  * Verifica se é um asset estático local
  */
 function isStaticAsset(url) {
-  return url.origin === location.origin &&
-    STATIC_ASSETS.some(asset => url.pathname.endsWith(asset.replace('./', ''))) ||
-    url.pathname === '/' ||
-    url.pathname === '/index.html';
+  // Verifica se é mesma origem
+  if (url.origin !== location.origin) return false;
+
+  const pathname = url.pathname;
+
+  // Raiz e index.html
+  if (pathname === '/' || pathname === '/index.html') return true;
+
+  // Verifica contra lista de assets estáticos conhecidos
+  return STATIC_ASSETS.some(asset => {
+    // Normaliza: remove / inicial para comparação
+    const assetPath = asset.startsWith('/') ? asset : '/' + asset;
+    return pathname === assetPath || pathname.endsWith(assetPath);
+  });
 }
 
 /**
@@ -119,7 +138,7 @@ async function cacheFirst(request, cacheName) {
   } catch (error) {
     // Fallback para página offline se for navegação
     if (request.mode === 'navigate') {
-      return cache.match('./index.html');
+      return cache.match('/index.html');
     }
     throw error;
   }
@@ -144,7 +163,7 @@ async function networkFirst(request, cacheName) {
     }
     // Fallback para navegação
     if (request.mode === 'navigate') {
-      return cache.match('./index.html');
+      return cache.match('/index.html');
     }
     throw error;
   }
@@ -169,8 +188,8 @@ self.addEventListener('push', (event) => {
   const data = event.data.json();
   const options = {
     body: data.body,
-    icon: './assets/icons/icon-192.png',
-    badge: './assets/icons/icon-72.png',
+    icon: '/assets/icons/icon-192.png',
+    badge: '/assets/icons/icon-72.png',
     vibrate: [100, 50, 100],
     data: data.url ? { url: data.url } : {},
     actions: data.actions || [],

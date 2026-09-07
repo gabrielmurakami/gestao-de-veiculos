@@ -1247,10 +1247,18 @@ const PTR = (() => {
 ═══════════════════════════════ */
 function init() {
   rebuildCarSelector();
-  renderDashboard();
+
+  // Handle deep linking from PWA manifest shortcuts (e.g., ?screen=fuel)
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialScreen = urlParams.get('screen');
+  const validScreens = ['dashboard', 'garage', 'fuel', 'maintenance'];
+  const startScreen = validScreens.includes(initialScreen) ? initialScreen : 'dashboard';
+
+  // Navigate to initial screen (handles rendering)
+  navigateTo(startScreen);
 
   // define lastScreenEl now that the dashboard is rendered
-  lastScreenEl = document.getElementById('screen-dashboard');
+  lastScreenEl = document.getElementById(`screen-${startScreen}`);
 
   // Initialize pull-to-refresh (gerencia internamente mobile vs desktop)
   PTR.init();
@@ -1303,7 +1311,7 @@ function seedDemoData() {
 // Service Worker Registration (PWA)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
+    navigator.serviceWorker.register('/sw.js')
       .then(reg => {
         console.log('[PWA] Service Worker registrado:', reg.scope);
         // Verifica updates periodicamente
