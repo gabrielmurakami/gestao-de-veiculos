@@ -849,75 +849,108 @@ ul { list-style: none; }
 }
 
 /* ══════════════════════════════════════════════════
-   PULL TO REFRESH (mobile)
+   PULL TO REFRESH (mobile) — v2 robusta
 ═══════════════════════════════════════════════════ */
+
+/*
+ * overscroll-behavior-y: contain no body garante que o PTR nativo
+ * do Chrome/Android não dispare junto com o nosso customizado,
+ * sem quebrar o scroll interno das telas.
+ */
 @media (max-width: 768px) {
-  .ptr-wrapper {
-    position: relative;
-    overflow: hidden;
-    flex: 1;
-    min-height: 100%;
+  body {
+    overscroll-behavior-y: contain;
   }
 
+  /* ── Wrapper: contexto de posição para o indicador ── */
+  .ptr-wrapper {
+    position: relative;
+    flex: 1;
+    min-height: 0; /* necessário dentro de flex-column para overflow correto */
+  }
+
+  /* ── Indicador (badge flutuante) ──────────────────── */
+  /*
+   * Começa completamente fora da viewport (translateY(-80px) abaixo
+   * do topo do topbar), com opacity:0.
+   * O JS move-o via style.transform + style.opacity diretamente,
+   * sem classes de posição — zero reflow por mudança de 'top'.
+   */
   .ptr-indicator {
-    position: absolute;
-    top: -60px;
+    position: fixed;
+    top: 56px; /* fica logo abaixo do topbar mobile */
     left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 40px;
+    transform: translateX(-50%) translateY(-80px); /* começa oculto acima */
+    opacity: 0;
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow-card);
-    opacity: 0;
-    transition: opacity 0.2s ease, top 0.2s ease;
-    z-index: 100;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-light);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    z-index: 300;
     pointer-events: none;
+    will-change: transform, opacity;
   }
 
-  .ptr-indicator.visible {
-    opacity: 1;
-    top: 20px;
-  }
-
-  .ptr-indicator.pulling {
-    top: 50px;
-  }
-
-  .ptr-indicator.refreshing {
-    top: 20px;
-    animation: ptr-spin 1s linear infinite;
-  }
-
-  .ptr-indicator svg {
-    width: 24px;
-    height: 24px;
+  /* ── Ícone SVG dentro do indicador ───────────────── */
+  .ptr-indicator__icon {
+    width: 20px;
+    height: 20px;
     color: var(--accent-blue);
-    transition: transform 0.2s ease;
+    /* A transition do ícone (rotação da seta) é sempre suave */
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: rotate(0deg);
+    overflow: visible;
   }
 
-  .ptr-indicator.pulling svg {
+  /*
+   * Estado "pronto para soltar": seta invertida (180°).
+   * CSS controla apenas a rotação do ícone completo.
+   */
+  .ptr-indicator--ready .ptr-indicator__icon {
     transform: rotate(180deg);
   }
 
-  .ptr-indicator.refreshing svg {
-    animation: ptr-spin 1s linear infinite;
+  /*
+   * Estado "refreshing": troca grupos SVG e gira.
+   * #ptr-arrow some, #ptr-spin aparece e gira.
+   */
+  .ptr-indicator--refreshing .ptr-indicator__icon {
+    transform: rotate(0deg); /* reset — a animação cuida da rotação */
+    animation: ptr-spin 0.75s linear infinite;
+  }
+
+  /* Oculta a seta durante o refresh */
+  .ptr-indicator--refreshing #ptr-arrow {
+    display: none;
+  }
+
+  /* Mostra o arco spinner durante o refresh */
+  .ptr-indicator--refreshing #ptr-spin {
+    display: block !important;
   }
 
   @keyframes ptr-spin {
-    from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
 
+  /* ── Conteúdo deslizável ──────────────────────────── */
+  /*
+   * Sem transition por padrão — o JS controla transform diretamente
+   * durante o arrasto para resposta imediata.
+   * A classe .ptr-content--snap é adicionada pelo JS apenas no
+   * momento em que o utilizador solta o dedo, ativando a animação
+   * de retorno suave.
+   */
   .ptr-content {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
   }
 
-  .ptr-content.pulling {
-    transform: translateY(60px);
+  .ptr-content--snap {
+    transition: transform 0.38s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
 }

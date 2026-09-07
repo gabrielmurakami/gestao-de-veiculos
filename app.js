@@ -942,148 +942,263 @@ document.getElementById('maintList').addEventListener('click', e => {
   }
 });
 
-/* ═══════════════════════════════
-   PULL TO REFRESH (mobile)
-═══════════════════════════════ */
-let ptrState = {
-  startY: 0,
-  currentY: 0,
-  pulling: false,
-  refreshing: false,
-  threshold: 80,
-  maxPull: 120,
-};
+/* ═══════════════════════════════════════════════════
+   PULL TO REFRESH (mobile) — v2 robusta
+   ─────────────────────────────────────────────────
+   Princípios:
+   1. overscroll-behavior-y:contain (CSS) bloqueia o PTR nativo.
+   2. touchstart com {passive:true} — nunca bloqueia scroll normal.
+   3. No touchmove, só chama preventDefault() depois de confirmar
+      que estamos genuinamente puxando para baixo E o scroll está
+      no topo, evitando conflitos com scroll vertical normal.
+   4. Resistência logarítmica: o indicador desce ~0.45× mais
+      devagar que o dedo e tem um teto de MAX_PULL px.
+   5. O indicador usa transform:translateY em vez de `top` para
+      evitar reflow; a transição de retorno é ativada via classe.
+   6. Um único gatilho por gesto — flag `refreshing` bloqueia tudo.
+═══════════════════════════════════════════════════ */
 
-const ptrWrapper = document.getElementById('ptrWrapper');
-const ptrIndicator = document.getElementById('ptrIndicator');
-const ptrContent = document.getElementById('ptrContent');
+const PTR = (() => {
+  /* ── Constantes de física ── */
+  const THRESHOLD  = 72;   // px de puxada para disparar o refresh
+  const MAX_PULL   = 80;   // teto de deslocamento do conteúdo (px)
+  const RESISTANCE = 0.45; // fator de atrito (0 = imóvel, 1 = sem atrito)
+  const REFRESH_MS = 1500; // duração simulada do fetch
 
-function initPullToRefresh() {
-  // Only enable on mobile
-  if (window.innerWidth > 768) return;
+  /* ── Elementos DOM ── */
+  const wrapper   = document.getElementById('ptrWrapper');
+  const indicator = document.getElementById('ptrIndicator');
+  const content   = document.getElementById('ptrContent');
 
-  // Touch start
-  ptrWrapper.addEventListener('touchstart', handleTouchStart, { passive: true });
-  // Touch move
-  ptrWrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
-  // Touch end
-  ptrWrapper.addEventListener('touchend', handleTouchEnd, { passive: true });
-}
+  /* ── Estado interno ── */
+  let startY      = 0;
+  let currentPull = 0;   // px de deslocamento atual (com resistência)
+  let pulling     = false;
+  let refreshing  = false;
+  let intentDown  = false; // intenção de pull-down confirmada no move
 
-function handleTouchStart(e) {
-  if (ptrState.refreshing) return;
+  /* ────────────────────────────────────────────────
+     Helpers de UI
+  ──────────────────────────────────────────────── */
 
-  // Only allow pull-to-refresh when at the top of the scroll
-  const scrollTop = window.scrollY || document.documentElement.scrollTop;
-  if (scrollTop > 0) return;
+  /**
+   * Move o indicador e o conteúdo sem causar reflow.
+   * O indicador segue o conteúdo mas começa oculto acima do topbar.
+   * Quando pull >= 16px torna-se visível; quando >= THRESHOLD inverte seta.
+   */
+  function _applyPull(px) {
+    // Conteúdo desliza com resistência
+    content.style.transform = `translateY(${px}px)`;
 
-  ptrState.startY = e.touches[0].clientY;
-  ptrState.pulling = true;
-}
+    // Indicador: começa em -80px acima do topbar, sobe junto ao conteúdo
+    // Satura em translateY(0) = posição visível logo abaixo do topbar
+    const indicatorY = Math.min(px - MAX_PULL, 0); // -80 → 0
+    indicator.style.transform = `translateX(-50%) translateY(${indicatorY}px)`;
 
-function handleTouchMove(e) {
-  if (!ptrState.pulling || ptrState.refreshing) return;
-
-  ptrState.currentY = e.touches[0].clientY;
-  const deltaY = ptrState.currentY - ptrState.startY;
-
-  // Only pull down (positive delta)
-  if (deltaY <= 0) {
-    resetPullState();
-    return;
-  }
-
-  // Prevent default scrolling when pulling
-  e.preventDefault();
-
-  // Calculate pull distance with resistance
-  let pullDistance = Math.min(deltaY * 0.5, ptrState.maxPull);
-
-  // Update indicator
-  ptrIndicator.classList.add('visible');
-  if (pullDistance >= ptrState.threshold) {
-    ptrIndicator.classList.add('pulling');
-  } else {
-    ptrIndicator.classList.remove('pulling');
-  }
-
-  // Move content
-  ptrContent.style.transform = `translateY(${pullDistance}px)`;
-  ptrContent.classList.add('pulling');
-}
-
-function handleTouchEnd(e) {
-  if (!ptrState.pulling || ptrState.refreshing) return;
-
-  const deltaY = ptrState.currentY - ptrState.startY;
-
-  if (deltaY >= ptrState.threshold) {
-    // Trigger refresh
-    triggerRefresh();
-  } else {
-    // Reset smoothly
-    resetPullState();
-  }
-}
-
-function triggerRefresh() {
-  ptrState.refreshing = true;
-  ptrState.pulling = false;
-
-  ptrIndicator.classList.remove('pulling');
-  ptrIndicator.classList.add('refreshing');
-  ptrContent.style.transform = 'translateY(60px)';
-
-  showToast('Atualizando...', 'info', 2000);
-
-  // Simulate async refresh - in real app, this would fetch new data
-  setTimeout(() => {
-    // Invalidate all caches and re-render current screen
-    ['cars', 'fuels', 'maints', 'selected'].forEach(key => DB.invalidate(key));
-    rebuildCarSelector();
-    renderCurrentScreen();
-    showToast('Dados atualizados!', 'success', 2000);
-
-    finishRefresh();
-  }, 1000);
-}
-
-function finishRefresh() {
-  ptrState.refreshing = false;
-
-  ptrIndicator.classList.remove('refreshing', 'visible');
-  ptrContent.style.transform = 'translateY(0)';
-  ptrContent.classList.remove('pulling');
-
-  // Reset state
-  ptrState.startY = 0;
-  ptrState.currentY = 0;
-}
-
-function resetPullState() {
-  ptrState.pulling = false;
-  ptrState.startY = 0;
-  ptrState.currentY = 0;
-
-  ptrIndicator.classList.remove('pulling', 'visible');
-  ptrContent.style.transform = 'translateY(0)';
-  ptrContent.classList.remove('pulling');
-}
-
-// Re-init on resize (mobile/desktop switch)
-let ptrInitialized = false;
-window.addEventListener('resize', () => {
-  if (window.innerWidth <= 768) {
-    if (!ptrInitialized) {
-      initPullToRefresh();
-      ptrInitialized = true;
+    // Estados visuais
+    if (px >= 16) {
+      indicator.style.opacity = Math.min((px - 8) / 32, 1); // fade-in suave
+    } else {
+      indicator.style.opacity = 0;
     }
-  } else {
-    // Clean up on desktop
-    resetPullState();
-    ptrInitialized = false;
+
+    const isReady = px >= THRESHOLD;
+    indicator.classList.toggle('ptr-indicator--ready', isReady);
   }
-});
+
+  /** Restaura tudo com transição suave ("snap back"). */
+  function _snapBack(targetPx = 0) {
+    // Ativa transition apenas no snap; durante o arrasto não há transition
+    content.classList.add('ptr-content--snap');
+    content.style.transform = `translateY(${targetPx}px)`;
+
+    indicator.style.transition = 'transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.25s ease';
+    indicator.style.transform  = `translateX(-50%) translateY(-80px)`;
+    indicator.style.opacity    = 0;
+
+    // Remove classes e transition após animação
+    content.addEventListener('transitionend', _cleanupSnap, { once: true });
+  }
+
+  function _cleanupSnap() {
+    content.classList.remove('ptr-content--snap');
+    content.style.transform = '';
+    indicator.style.transition = '';
+    indicator.style.transform  = '';
+    indicator.style.opacity    = '';
+    indicator.classList.remove('ptr-indicator--ready', 'ptr-indicator--refreshing');
+  }
+
+  /* ────────────────────────────────────────────────
+     Handlers de toque
+  ──────────────────────────────────────────────── */
+
+  function _onTouchStart(e) {
+    // Bloqueia novo gesto enquanto recarrega
+    if (refreshing) return;
+
+    // Verifica scroll do documento E do elemento rolável ativo
+    const scrollTop = document.documentElement.scrollTop || window.scrollY;
+    if (scrollTop > 0) return;
+
+    startY      = e.touches[0].clientY;
+    currentPull = 0;
+    pulling     = false;   // confirmado apenas no move
+    intentDown  = false;
+  }
+
+  function _onTouchMove(e) {
+    if (refreshing) return;
+
+    const touchY = e.touches[0].clientY;
+    const rawDelta = touchY - startY;
+
+    // Ignora movimento para cima ou neutro
+    if (rawDelta <= 0) {
+      // Se já estávamos puxando, cancela
+      if (pulling) _cancelPull();
+      return;
+    }
+
+    // Primeira confirmação de intenção para baixo
+    if (!intentDown) {
+      // Só ativa se movimento for predominantemente vertical para baixo
+      // e o scroll realmente estiver no topo
+      const scrollTop = document.documentElement.scrollTop || window.scrollY;
+      if (scrollTop > 0) return;
+      intentDown = true;
+      pulling    = true;
+    }
+
+    if (!pulling) return;
+
+    /*
+     * Chama preventDefault() APENAS aqui, quando temos certeza
+     * da intenção de PTR. Isso evita quebrar scroll normal de
+     * elementos internos que já fizeram scrollTop > 0 antes.
+     */
+    e.preventDefault();
+
+    // Física de resistência: sqrt dá uma curva logarítmica suave
+    const resistance = RESISTANCE * Math.sqrt(rawDelta / MAX_PULL);
+    currentPull = Math.min(rawDelta * resistance, MAX_PULL);
+
+    _applyPull(currentPull);
+  }
+
+  function _onTouchEnd() {
+    if (!pulling || refreshing) return;
+
+    pulling    = false;
+    intentDown = false;
+
+    if (currentPull >= THRESHOLD) {
+      _triggerRefresh();
+    } else {
+      _cancelPull();
+    }
+  }
+
+  function _onTouchCancel() {
+    pulling    = false;
+    intentDown = false;
+    if (!refreshing) _cancelPull();
+  }
+
+  function _cancelPull() {
+    currentPull = 0;
+    _snapBack(0);
+  }
+
+  /* ────────────────────────────────────────────────
+     Lógica de refresh
+  ──────────────────────────────────────────────── */
+
+  function _triggerRefresh() {
+    refreshing = true;
+
+    // Trava o conteúdo na posição do indicador visível (snap para cá)
+    const holdPx = MAX_PULL * 0.75; // ~60px — indicador fica visível
+    content.classList.add('ptr-content--snap');
+    content.style.transform = `translateY(${holdPx}px)`;
+
+    indicator.style.transition = 'transform 0.25s ease, opacity 0.2s ease';
+    indicator.style.transform  = `translateX(-50%) translateY(0px)`;
+    indicator.style.opacity    = '1';
+    indicator.classList.remove('ptr-indicator--ready');
+    indicator.classList.add('ptr-indicator--refreshing');
+
+    // Remove snap-class após o snap inicial (não deve interferir no spinner)
+    content.addEventListener('transitionend', () => {
+      content.classList.remove('ptr-content--snap');
+    }, { once: true });
+
+    showToast('Atualizando...', 'info', 1200);
+
+    // Fetch simulado — substitua por chamada real futura
+    setTimeout(() => {
+      ['cars', 'fuels', 'maints', 'selected'].forEach(k => DB.invalidate(k));
+      rebuildCarSelector();
+      renderCurrentScreen();
+
+      _finishRefresh();
+      showToast('Dados atualizados!', 'success', 2000);
+    }, REFRESH_MS);
+  }
+
+  function _finishRefresh() {
+    refreshing  = false;
+    currentPull = 0;
+
+    indicator.classList.remove('ptr-indicator--refreshing');
+    _snapBack(0);
+  }
+
+  /* ────────────────────────────────────────────────
+     Inicialização e gestão de ciclo de vida
+  ──────────────────────────────────────────────── */
+
+  let _bound = false;
+
+  function _bind() {
+    if (_bound) return;
+    /*
+     * touchstart: passive:true — nunca bloqueia o scroll nativo.
+     * touchmove:  passive:false — necessário para chamar preventDefault()
+     *             condicionalmente quando a intenção de PTR é confirmada.
+     */
+    wrapper.addEventListener('touchstart',  _onTouchStart,  { passive: true });
+    wrapper.addEventListener('touchmove',   _onTouchMove,   { passive: false });
+    wrapper.addEventListener('touchend',    _onTouchEnd,    { passive: true });
+    wrapper.addEventListener('touchcancel', _onTouchCancel, { passive: true });
+    _bound = true;
+  }
+
+  function _unbind() {
+    wrapper.removeEventListener('touchstart',  _onTouchStart);
+    wrapper.removeEventListener('touchmove',   _onTouchMove);
+    wrapper.removeEventListener('touchend',    _onTouchEnd);
+    wrapper.removeEventListener('touchcancel', _onTouchCancel);
+    _bound = false;
+    _cancelPull();
+  }
+
+  function init() {
+    if (window.innerWidth <= 768) _bind();
+
+    // Adapta se o utilizador redimensionar (ex: DevTools responsive mode)
+    let _resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(_resizeTimer);
+      _resizeTimer = setTimeout(() => {
+        if (window.innerWidth <= 768) _bind();
+        else _unbind();
+      }, 150);
+    });
+  }
+
+  return { init };
+})();
 
 /* ═══════════════════════════════
    INIT
@@ -1095,11 +1210,8 @@ function init() {
   // define lastScreenEl now that the dashboard is rendered
   lastScreenEl = document.getElementById('screen-dashboard');
 
-  // Initialize pull-to-refresh on mobile
-  if (window.innerWidth <= 768) {
-    initPullToRefresh();
-    ptrInitialized = true;
-  }
+  // Initialize pull-to-refresh (gerencia internamente mobile vs desktop)
+  PTR.init();
 
   // Seed demo data if first run
   if (DB.getCars().length === 0 && !localStorage.getItem('ag_seeded')) {
