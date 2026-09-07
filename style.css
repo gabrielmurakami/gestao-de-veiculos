@@ -166,7 +166,7 @@ ul { list-style: none; }
   margin-left: var(--sidebar-w);
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  height: 100dvh; /* altura definida para flex children funcionarem */
   max-width: 100%;
   padding-top: 62px; /* altura do topbar fixo */
 }
@@ -802,6 +802,8 @@ ul { list-style: none; }
     margin-left: 0;
     padding-bottom: 0;
     padding-top: 56px; /* topbar fixo mobile */
+    overflow: visible; /* deixa ptrWrapper gerenciar scroll */
+    height: 100dvh; /* altura definida para flex children funcionarem */
   }
 
   .bottom-nav { display: flex; }
@@ -860,6 +862,7 @@ ul { list-style: none; }
 @media (max-width: 768px) {
   body {
     overscroll-behavior-y: contain;
+    overflow: hidden; /* impede scroll no body — ptrWrapper é o scroll container */
   }
 
   /* ── Wrapper: contexto de posição para o indicador ── */
@@ -867,6 +870,9 @@ ul { list-style: none; }
     position: relative;
     flex: 1;
     min-height: 0; /* necessário dentro de flex-column para overflow correto */
+    overflow-y: auto; /* torna este o container de scroll real */
+    -webkit-overflow-scrolling: touch; /* scroll suave no iOS */
+    height: 100%; /* garante que preencha o espaço disponível */
   }
 
   /* ── Indicador (badge flutuante) ──────────────────── */

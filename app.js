@@ -141,6 +141,16 @@ function invalidateCarScreens() {
   ['dashboard', 'fuel', 'maintenance'].forEach(s => markDirty(s));
 }
 
+// Invalida telas que dependem de abastecimentos (dashboard + fuel)
+function invalidateFuelScreens() {
+  ['dashboard', 'fuel'].forEach(s => markDirty(s));
+}
+
+// Invalida telas que dependem de manutenções (dashboard + maintenance)
+function invalidateMaintScreens() {
+  ['dashboard', 'maintenance'].forEach(s => markDirty(s));
+}
+
 function navigateTo(screenId) {
   if (currentScreen === screenId) return;
   currentScreen = screenId;
@@ -233,6 +243,7 @@ function rebuildCarSelector() {
 
 carSel.addEventListener('change', () => {
   DB.setSelectedCar(carSel.value);
+  invalidateCarScreens(); // dashboard, fuel, maintenance mudam com o carro selecionado
   renderCurrentScreen();
 });
 
@@ -581,6 +592,7 @@ document.getElementById('carList').addEventListener('click', e => {
   if (action === 'select') {
     DB.setSelectedCar(id);
     carSel.value = id;
+    invalidateCarScreens(); // dashboard, fuel, maintenance precisam atualizar com novo carro
     renderGarageScreen();
     showToast('Veículo selecionado!', 'info');
   }
@@ -770,6 +782,7 @@ document.getElementById('btnSaveFuel').addEventListener('click', () => {
 
   showToast('Abastecimento registrado!');
   document.getElementById('btnClearFuel').click();
+  invalidateFuelScreens(); // dashboard + fuel precisam atualizar
   renderFuelScreen();
 });
 
@@ -788,6 +801,7 @@ document.getElementById('fuelHistoryList').addEventListener('click', e => {
   showConfirm('Excluir abastecimento', 'Isso irá remover este registro permanentemente.', () => {
     const fuels = DB.getFuels().filter(f => f.id !== btn.dataset.id);
     DB.saveFuels(fuels);
+    invalidateFuelScreens(); // dashboard + fuel precisam atualizar
     renderFuelScreen();
     showToast('Registro excluído.', 'info');
   });
@@ -914,6 +928,7 @@ document.getElementById('btnSaveMaint').addEventListener('click', () => {
 
   showToast('Manutenção agendada!');
   hideMaintForm();
+  invalidateMaintScreens(); // dashboard + maintenance precisam atualizar
   renderMaintScreen();
 });
 
@@ -928,6 +943,7 @@ document.getElementById('maintList').addEventListener('click', e => {
     const idx = maints.findIndex(m => m.id === id);
     if (idx !== -1) maints[idx].resolved = true;
     DB.saveMaints(maints);
+    invalidateMaintScreens(); // dashboard + maintenance precisam atualizar
     renderMaintScreen();
     showToast('Manutenção marcada como concluída!');
   }
@@ -936,6 +952,7 @@ document.getElementById('maintList').addEventListener('click', e => {
     showConfirm('Excluir manutenção', 'Remover este agendamento permanentemente?', () => {
       const maints = DB.getMaints().filter(m => m.id !== id);
       DB.saveMaints(maints);
+      invalidateMaintScreens(); // dashboard + maintenance precisam atualizar
       renderMaintScreen();
       showToast('Manutenção removida.', 'info');
     });
@@ -969,6 +986,12 @@ const PTR = (() => {
   const wrapper   = document.getElementById('ptrWrapper');
   const indicator = document.getElementById('ptrIndicator');
   const content   = document.getElementById('ptrContent');
+
+  // Debug: verifica se elementos existem
+  if (!wrapper || !indicator || !content) {
+    console.warn('[PTR] Elementos não encontrados - pull-to-refresh desabilitado');
+    return { init: () => {} };
+  }
 
   /* ── Estado interno ── */
   let startY      = 0;
@@ -1037,9 +1060,8 @@ const PTR = (() => {
     // Bloqueia novo gesto enquanto recarrega
     if (refreshing) return;
 
-    // Verifica scroll do documento E do elemento rolável ativo
-    const scrollTop = document.documentElement.scrollTop || window.scrollY;
-    if (scrollTop > 0) return;
+    // Verifica scroll do container rolável (ptrWrapper)
+    if (wrapper.scrollTop > 0) return;
 
     startY      = e.touches[0].clientY;
     currentPull = 0;
@@ -1064,8 +1086,7 @@ const PTR = (() => {
     if (!intentDown) {
       // Só ativa se movimento for predominantemente vertical para baixo
       // e o scroll realmente estiver no topo
-      const scrollTop = document.documentElement.scrollTop || window.scrollY;
-      if (scrollTop > 0) return;
+      if (wrapper.scrollTop > 0) return;
       intentDown = true;
       pulling    = true;
     }
@@ -1086,8 +1107,14 @@ const PTR = (() => {
     _applyPull(currentPull);
   }
 
-  function _onTouchEnd() {
-    if (!pulling || refreshing) return;
+  function _onTouchEnd(e) {
+    // IMPORTANTE: Se refreshing estiver true, NÃO processa o fim do toque
+    // Isso evita que um touchend tardio re-dispare o refresh
+    if (!pulling || refreshing) {
+      // Garante limpeza se estiver pulling mas refreshing iniciou
+      if (pulling && refreshing) _cancelPull();
+      return;
+    }
 
     pulling    = false;
     intentDown = false;
@@ -1136,17 +1163,32 @@ const PTR = (() => {
     showToast('Atualizando...', 'info', 1200);
 
     // Fetch simulado — substitua por chamada real futura
-    setTimeout(() => {
-      ['cars', 'fuels', 'maints', 'selected'].forEach(k => DB.invalidate(k));
-      rebuildCarSelector();
-      renderCurrentScreen();
-
-      _finishRefresh();
-      showToast('Dados atualizados!', 'success', 2000);
+    // Envolve em try/finally para garantir que _finishRefresh sempre execute
+    const timeoutId = setTimeout(() => {
+      try {
+        ['cars', 'fuels', 'maints', 'selected'].forEach(k => DB.invalidate(k));
+        rebuildCarSelector();
+        renderCurrentScreen();
+      } catch (err) {
+        console.error('[PTR] Erro durante refresh:', err);
+      } finally {
+        _finishRefresh();
+        showToast('Dados atualizados!', 'success', 2000);
+      }
     }, REFRESH_MS);
+
+    // Safety net: força reset se o refresh demorar demais (ex: página em background)
+    setTimeout(() => {
+      if (refreshing) {
+        console.warn('[PTR] Timeout de segurança ativado - forçando fim do refresh');
+        _finishRefresh();
+      }
+    }, REFRESH_MS + 2000);
   }
 
   function _finishRefresh() {
+    // Evita chamadas duplicadas
+    if (!refreshing) return;
     refreshing  = false;
     currentPull = 0;
 
