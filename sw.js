@@ -4,73 +4,75 @@
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = "v3";
 const CACHE_NAME = `autogest-${CACHE_VERSION}`;
 const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
 const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;
 
 // Arquivos locais que devem ser cacheados imediatamente (caminhos absolutos a partir da raiz)
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/style.css',
-  '/manifest.json',
-  '/chart.umd.min.js',
-  '/assets/icons/icon-72.png',
-  '/assets/icons/icon-96.png',
-  '/assets/icons/icon-128.png',
-  '/assets/icons/icon-144.png',
-  '/assets/icons/icon-152.png',
-  '/assets/icons/icon-192.png',
-  '/assets/icons/icon-384.png',
-  '/assets/icons/icon-512.png',
-  '/assets/icons/icon.svg',
+  "/",
+  "/index.html",
+  "/app.js",
+  "/style.css",
+  "/manifest.json",
+  "/chart.umd.min.js",
+  "/assets/icons/icon-72.png",
+  "/assets/icons/icon-96.png",
+  "/assets/icons/icon-128.png",
+  "/assets/icons/icon-144.png",
+  "/assets/icons/icon-152.png",
+  "/assets/icons/icon-192.png",
+  "/assets/icons/icon-384.png",
+  "/assets/icons/icon-512.png",
+  "/assets/icons/icon.svg",
 ];
 
 // Recursos externos (CDN) - cache com network-first (apenas fontes Google)
 const CDN_RESOURCES = [
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap',
-  'https://fonts.gstatic.com/',
+  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+  "https://fonts.gstatic.com/",
 ];
 
 // Instalação: pré-cache dos assets estáticos
-self.addEventListener('install', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_STATIC)
+    caches
+      .open(CACHE_STATIC)
       .then((cache) => {
-        console.log('[SW] Pré-cache de assets estáticos');
+        console.log("[SW] Pré-cache de assets estáticos");
         return cache.addAll(STATIC_ASSETS);
       })
-      .then(() => self.skipWaiting())
+      .then(() => self.skipWaiting()),
   );
 });
 
 // Ativação: limpeza de caches antigos
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
             .filter((name) => name !== CACHE_STATIC && name !== CACHE_CDN)
             .map((name) => {
-              console.log('[SW] Removendo cache antigo:', name);
+              console.log("[SW] Removendo cache antigo:", name);
               return caches.delete(name);
-            })
+            }),
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim()),
   );
 });
 
 // Interceptação de requisições
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
   // Ignora requisições não-HTTP(S)
-  if (!url.protocol.startsWith('http')) return;
+  if (!url.protocol.startsWith("http")) return;
 
   // Estratégia por tipo de recurso
   if (isStaticAsset(url)) {
@@ -95,12 +97,12 @@ function isStaticAsset(url) {
   const pathname = url.pathname;
 
   // Raiz e index.html
-  if (pathname === '/' || pathname === '/index.html') return true;
+  if (pathname === "/" || pathname === "/index.html") return true;
 
   // Verifica contra lista de assets estáticos conhecidos
-  return STATIC_ASSETS.some(asset => {
+  return STATIC_ASSETS.some((asset) => {
     // Normaliza: remove / inicial para comparação
-    const assetPath = asset.startsWith('/') ? asset : '/' + asset;
+    const assetPath = asset.startsWith("/") ? asset : "/" + asset;
     return pathname === assetPath || pathname.endsWith(assetPath);
   });
 }
@@ -109,12 +111,18 @@ function isStaticAsset(url) {
  * Verifica se é um recurso de CDN conhecido (Google Fonts)
  */
 function isCdnResource(url) {
-  return CDN_RESOURCES.some(cdn => {
+  return CDN_RESOURCES.some((cdn) => {
     // Para URLs do Google Fonts, verificar origem
-    if (cdn.includes('fonts.googleapis.com') || cdn.includes('fonts.gstatic.com')) {
-      return url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+    if (
+      cdn.includes("fonts.googleapis.com") ||
+      cdn.includes("fonts.gstatic.com")
+    ) {
+      return (
+        url.hostname === "fonts.googleapis.com" ||
+        url.hostname === "fonts.gstatic.com"
+      );
     }
-    return url.href.startsWith(cdn.split('/').slice(0, 3).join('/'));
+    return url.href.startsWith(cdn.split("/").slice(0, 3).join("/"));
   });
 }
 
@@ -137,8 +145,8 @@ async function cacheFirst(request, cacheName) {
     return response;
   } catch (error) {
     // Fallback para página offline se for navegação
-    if (request.mode === 'navigate') {
-      return cache.match('/index.html');
+    if (request.mode === "navigate") {
+      return cache.match("/index.html");
     }
     throw error;
   }
@@ -162,48 +170,46 @@ async function networkFirst(request, cacheName) {
       return cached;
     }
     // Fallback para navegação
-    if (request.mode === 'navigate') {
-      return cache.match('/index.html');
+    if (request.mode === "navigate") {
+      return cache.match("/index.html");
     }
     throw error;
   }
 }
 
 // Sincronização em background (opcional - para futuras features)
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-data') {
+self.addEventListener("sync", (event) => {
+  if (event.tag === "sync-data") {
     event.waitUntil(syncLocalData());
   }
 });
 
 async function syncLocalData() {
   // Placeholder para futura sincronização com backend
-  console.log('[SW] Background sync triggered');
+  console.log("[SW] Background sync triggered");
 }
 
 // Notificações push (opcional - para futuras features)
-self.addEventListener('push', (event) => {
+self.addEventListener("push", (event) => {
   if (!event.data) return;
 
   const data = event.data.json();
   const options = {
     body: data.body,
-    icon: '/assets/icons/icon-192.png',
-    badge: '/assets/icons/icon-72.png',
+    icon: "/assets/icons/icon-192.png",
+    badge: "/assets/icons/icon-72.png",
     vibrate: [100, 50, 100],
     data: data.url ? { url: data.url } : {},
     actions: data.actions || [],
   };
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
+  event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  if (event.action === 'open' && event.notification.data?.url) {
+  if (event.action === "open" && event.notification.data?.url) {
     event.waitUntil(clients.openWindow(event.notification.data.url));
   } else if (event.notification.data?.url) {
     event.waitUntil(clients.openWindow(event.notification.data.url));
