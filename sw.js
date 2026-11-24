@@ -1,10 +1,10 @@
 /**
  * AutoGest Service Worker
- * Estratégia: Cache-first para assets estáticos, Network-first para CDN (Chart.js, Fonts)
+ * Estratégia: Cache-first para assets locais (inclui Chart.js e fonte), Network-first para o resto
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v8";
 const CACHE_NAME = `autogest-${CACHE_VERSION}`;
 const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
 const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;
@@ -26,12 +26,7 @@ const STATIC_ASSETS = [
   "/assets/icons/icon-384.png",
   "/assets/icons/icon-512.png",
   "/assets/icons/icon.svg",
-];
-
-// Recursos externos (CDN) - cache com network-first (apenas fontes Google)
-const CDN_RESOURCES = [
-  "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
-  "https://fonts.gstatic.com/",
+  "/assets/fonts/inter-latin-var.woff2",
 ];
 
 // Instalação: pré-cache dos assets estáticos
@@ -78,9 +73,6 @@ self.addEventListener("fetch", (event) => {
   if (isStaticAsset(url)) {
     // Cache-first para assets locais
     event.respondWith(cacheFirst(request, CACHE_STATIC));
-  } else if (isCdnResource(url)) {
-    // Network-first para CDN (com fallback para cache)
-    event.respondWith(networkFirst(request, CACHE_CDN));
   } else {
     // Default: network-first para tudo o mais
     event.respondWith(networkFirst(request, CACHE_CDN));
@@ -104,25 +96,6 @@ function isStaticAsset(url) {
     // Normaliza: remove / inicial para comparação
     const assetPath = asset.startsWith("/") ? asset : "/" + asset;
     return pathname === assetPath || pathname.endsWith(assetPath);
-  });
-}
-
-/**
- * Verifica se é um recurso de CDN conhecido (Google Fonts)
- */
-function isCdnResource(url) {
-  return CDN_RESOURCES.some((cdn) => {
-    // Para URLs do Google Fonts, verificar origem
-    if (
-      cdn.includes("fonts.googleapis.com") ||
-      cdn.includes("fonts.gstatic.com")
-    ) {
-      return (
-        url.hostname === "fonts.googleapis.com" ||
-        url.hostname === "fonts.gstatic.com"
-      );
-    }
-    return url.href.startsWith(cdn.split("/").slice(0, 3).join("/"));
   });
 }
 

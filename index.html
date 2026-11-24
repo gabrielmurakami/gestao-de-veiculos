@@ -4,14 +4,24 @@
     <meta charset="UTF-8" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+      content="width=device-width, initial-scale=1.0"
     />
     <title>AutoGest — Gestão de Veículos</title>
     <meta
       name="description"
       content="Sistema offline-first para monitorar consumo, abastecimentos e manutenções de veículos. Dashboard com km/l, gráficos e alertas de manutenção."
     />
-    <meta name="theme-color" content="#3B82F6" />
+    <meta name="color-scheme" content="dark light" />
+    <meta
+      name="theme-color"
+      content="#0f1e2e"
+      media="(prefers-color-scheme: dark)"
+    />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
@@ -34,22 +44,67 @@
     />
     <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
     <link rel="mask-icon" href="/assets/icons/icon.svg" color="#3B82F6" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      href="/assets/fonts/inter-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
-    <script src="/chart.umd.min.js" defer></script>
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
+    <!-- Sprite de ícones (mesmo traço do menu): usar com <svg class="i"><use href="#i-nome"/></svg> -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <defs>
+        <symbol id="i-edit" viewBox="0 0 24 24">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </symbol>
+        <symbol id="i-trash" viewBox="0 0 24 24">
+          <path d="M3 6h18" />
+          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <path d="M10 11v6M14 11v6" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path d="M20 6 9 17l-5-5" />
+        </symbol>
+        <symbol id="i-fuel" viewBox="0 0 24 24">
+          <path d="M3 22h12" />
+          <path d="M4 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18" />
+          <path d="M4 9h10" />
+          <path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.8a2 2 0 0 0-.6-1.4L18 5" />
+        </symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <path d="M16 2v4M8 2v4M3 10h18" />
+        </symbol>
+        <symbol id="i-gauge" viewBox="0 0 24 24">
+          <path d="M12 14l4-4" />
+          <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+        </symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24">
+          <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+          <path d="M12 9v4M12 17h.01" />
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24">
+          <path d="M18 6 6 18M6 6l12 12" />
+        </symbol>
+        <symbol id="i-bolt" viewBox="0 0 24 24">
+          <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" />
+        </symbol>
+      </defs>
+    </svg>
+
     <!-- ═══════════════════════════════════════════
        SIDEBAR / NAV LATERAL (desktop)
   ═══════════════════════════════════════════ -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__brand">
-        <span class="brand-icon">⚡</span>
+        <span class="brand-icon" aria-hidden="true"
+          ><svg class="i"><use href="#i-bolt" /></svg
+        ></span>
         <span class="brand-name">AutoGest</span>
       </div>
 
@@ -240,40 +295,83 @@
                   <div class="kpi-value kpi-value--sm" id="kpiLastFuel">—</div>
                   <span class="kpi-sub" id="kpiLastDate">—</span>
                 </div>
+                <div class="kpi-card">
+                  <span class="kpi-label">Custo por km</span>
+                  <div class="kpi-value kpi-value--sm" id="kpiCostKm">—</div>
+                  <span class="kpi-sub" id="kpiCostKmSub">só combustível</span>
+                </div>
+                <div class="kpi-card">
+                  <span class="kpi-label">Gasto no mês</span>
+                  <div class="kpi-value kpi-value--sm" id="kpiMonthSpend">—</div>
+                  <span class="kpi-sub" id="kpiMonthSub">—</span>
+                </div>
+                <div class="kpi-card">
+                  <span class="kpi-label">Preço médio do litro</span>
+                  <div class="kpi-value kpi-value--sm" id="kpiAvgPrice">—</div>
+                  <span class="kpi-sub" id="kpiAvgPriceSub">—</span>
+                </div>
               </div>
 
-              <!-- Chart -->
-              <div class="chart-card">
-                <div class="chart-card__header">
-                  <h3>Histórico de consumo</h3>
-                  <span class="badge" id="chartBadge">últimos registros</span>
-                </div>
-                <div class="chart-wrap" id="chartWrap">
-                  <canvas id="consumoChart"></canvas>
-                  <div class="chart-empty" id="chartEmpty">
-                    <p>Registre ao menos 2 abastecimentos para ver o gráfico</p>
+              <div class="dash-columns">
+                <div class="dash-main">
+                  <!-- Chart: consumo -->
+                  <div class="chart-card">
+                    <div class="chart-card__header">
+                      <h3>Histórico de consumo</h3>
+                      <span class="badge" id="chartBadge">km/l</span>
+                    </div>
+                    <div class="chart-wrap" id="chartWrap">
+                      <canvas
+                        id="consumoChart"
+                        role="img"
+                        aria-label="Gráfico de consumo em km/l por abastecimento"
+                      ></canvas>
+                      <div class="chart-empty" id="chartEmpty">
+                        <p>Registre ao menos 2 abastecimentos para ver o gráfico</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Chart: gasto mensal -->
+                  <div class="chart-card">
+                    <div class="chart-card__header">
+                      <h3>Gasto mensal com combustível</h3>
+                      <span class="badge" id="spendBadge">últimos 6 meses</span>
+                    </div>
+                    <div class="chart-wrap" id="spendChartWrap">
+                      <canvas
+                        id="spendChart"
+                        role="img"
+                        aria-label="Gráfico de gasto mensal com combustível"
+                      ></canvas>
+                      <div class="chart-empty" id="spendChartEmpty">
+                        <p>Informe o preço por litro nos abastecimentos para ver os gastos</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <!-- Maintenance cards -->
-              <div class="section-header">
-                <h3>Próximas manutenções</h3>
-                <button
-                  class="btn btn--ghost btn--sm"
-                  data-screen="maintenance"
-                >
-                  + Nova
-                </button>
-              </div>
-              <div class="maintenance-grid" id="maintenanceGrid">
-                <div class="maint-empty" id="maintEmpty">
-                  <p>
-                    Nenhuma manutenção agendada.
-                    <button class="link-btn" data-screen="maintenance">
-                      Agendar agora
+                <div class="dash-side">
+                  <!-- Maintenance cards -->
+                  <div class="section-header">
+                    <h3>Próximas manutenções</h3>
+                    <button
+                      class="btn btn--ghost btn--sm"
+                      data-screen="maintenance"
+                    >
+                      + Nova
                     </button>
-                  </p>
+                  </div>
+                  <div class="maintenance-grid" id="maintenanceGrid">
+                    <div class="maint-empty" id="maintEmpty">
+                      <p>
+                        Nenhuma manutenção agendada.
+                        <button class="link-btn" data-screen="maintenance">
+                          Agendar agora
+                        </button>
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -297,7 +395,7 @@
                   id="btnCloseCarForm"
                   aria-label="Fechar"
                 >
-                  ✕
+                  <svg class="i" aria-hidden="true"><use href="#i-close" /></svg>
                 </button>
               </div>
               <div class="form-grid">
@@ -376,6 +474,31 @@
                 <p>Nenhum veículo cadastrado ainda.</p>
               </div>
             </div>
+
+            <!-- Backup -->
+            <div class="backup-card">
+              <div class="backup-card__text">
+                <h4>Backup dos dados</h4>
+                <p>
+                  Seus dados ficam só neste navegador. Exporte um arquivo de
+                  backup para não perdê-los ou para levá-los a outro aparelho.
+                </p>
+              </div>
+              <div class="backup-card__actions">
+                <button class="btn btn--ghost btn--sm" id="btnExportData">
+                  Exportar backup
+                </button>
+                <button class="btn btn--ghost btn--sm" id="btnImportData">
+                  Importar backup
+                </button>
+                <input
+                  type="file"
+                  id="importFile"
+                  accept="application/json,.json"
+                  hidden
+                />
+              </div>
+            </div>
           </section>
 
           <!-- ─── SCREEN: ABASTECIMENTO ─────────────── -->
@@ -385,7 +508,7 @@
             </div>
 
             <div class="no-car-warn" id="fuelNoCar" style="display: none">
-              <p>⚠️ Cadastre um veículo antes de registrar abastecimentos.</p>
+              <p><svg class="i" aria-hidden="true"><use href="#i-alert" /></svg> Cadastre um veículo antes de registrar abastecimentos.</p>
               <button class="btn btn--primary btn--sm" data-screen="garage">
                 Ir para Garagem
               </button>
@@ -491,7 +614,7 @@
             </div>
 
             <div class="no-car-warn" id="maintNoCar" style="display: none">
-              <p>⚠️ Cadastre um veículo antes de agendar manutenções.</p>
+              <p><svg class="i" aria-hidden="true"><use href="#i-alert" /></svg> Cadastre um veículo antes de agendar manutenções.</p>
               <button class="btn btn--primary btn--sm" data-screen="garage">
                 Ir para Garagem
               </button>
@@ -506,7 +629,7 @@
                   id="btnCloseMaintForm"
                   aria-label="Fechar"
                 >
-                  ✕
+                  <svg class="i" aria-hidden="true"><use href="#i-close" /></svg>
                 </button>
               </div>
               <div class="form-grid">
@@ -634,7 +757,12 @@
     </nav>
 
     <!-- TOAST NOTIFICATIONS -->
-    <div class="toast-container" id="toastContainer"></div>
+    <div
+      class="toast-container"
+      id="toastContainer"
+      role="status"
+      aria-live="polite"
+    ></div>
 
     <!-- CONFIRM MODAL -->
     <div class="modal-overlay" id="modalOverlay" style="display: none">

@@ -99,8 +99,31 @@ function fmtDate(str) {
   const [y, m, d] = str.split("-");
   return `${d}/${m}/${y}`;
 }
+// Data no fuso LOCAL (toISOString usa UTC: no Brasil, depois das 21h viraria "amanhã")
+function localISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function today() {
-  return new Date().toISOString().split("T")[0];
+  return localISO(new Date());
+}
+
+const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+function fmtMoney(n) {
+  return typeof n === "number" && Number.isFinite(n) ? BRL.format(n) : "—";
+}
+
+// Ícone do sprite SVG definido no index.html (#i-<name>)
+function icon(name) {
+  return `<svg class="i" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+}
+
+// Escapa texto do usuário antes de interpolar em innerHTML (evita XSS)
+const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ESC_MAP[ch]);
 }
 function carEmoji(fuel) {
   const map = {
@@ -116,16 +139,54 @@ function carEmoji(fuel) {
 /* ═══════════════════════════════
    TOAST NOTIFICATIONS
 ═══════════════════════════════ */
-function showToast(msg, type = "success", duration = 3000) {
+/**
+ * @param {object} [action] botão opcional no toast, ex.: { label: "Desfazer", onClick }
+ */
+function showToast(msg, type = "success", duration = 3000, action = null) {
   const container = document.getElementById("toastContainer");
   const t = document.createElement("div");
   t.className = `toast toast--${type}`;
-  t.textContent = msg;
-  container.appendChild(t);
-  setTimeout(() => {
+  const text = document.createElement("span");
+  text.textContent = msg;
+  t.appendChild(text);
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
     t.style.animation = "slideOut .25s ease forwards";
     t.addEventListener("animationend", () => t.remove());
-  }, duration);
+    setTimeout(() => t.remove(), 400); // garante remoção mesmo sem animação
+  };
+
+  if (action) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "toast__action";
+    btn.textContent = action.label;
+    btn.addEventListener("click", () => {
+      close();
+      action.onClick();
+    });
+    t.appendChild(btn);
+  }
+
+  container.appendChild(t);
+  setTimeout(close, duration);
+}
+
+// Exclusão com "Desfazer": `restore` recoloca os dados como estavam
+function showUndoToast(msg, restore) {
+  showToast(msg, "info", 6000, {
+    label: "Desfazer",
+    onClick: () => {
+      restore();
+      // Tudo pode ter mudado: marca todas as telas e redesenha a visível
+      Object.keys(renderState).forEach(markDirty);
+      renderCurrentScreen();
+      showToast("Exclusão desfeita.");
+    },
+  });
 }
 
 /* ═══════════════════════════════
@@ -212,7 +273,12 @@ function navigateTo(screenId) {
   document.getElementById("topbarTitle").textContent =
     SCREEN_TITLES[screenId] || screenId;
 
-  // LAZY RENDER: só renderiza se sujo ou primeira vez
+  renderCurrentScreen();
+}
+
+// LAZY RENDER: só renderiza a tela atual se estiver suja ou nunca renderizada
+function renderCurrentScreen() {
+  const screenId = currentScreen;
   const state = renderState[screenId];
   if (state && (state.dirty || !state.rendered)) {
     if (screenId === "dashboard") renderDashboard();
@@ -329,26 +395,84 @@ function calcAvgKml(fuels) {
    CHART
 ═══════════════════════════════ */
 let consumoChart = null;
+let chartRenderId = 0; // descarta renders antigos se o carro mudar durante o download
 
-function renderChart(fuels) {
-  const canvas = document.getElementById("consumoChart");
-  const empty = document.getElementById("chartEmpty");
-  const sorted = [...fuels].sort((a, b) => a.odometer - b.odometer);
-
-  if (sorted.length < 2) {
-    canvas.style.display = "none";
-    empty.style.display = "flex";
-    if (consumoChart) {
-      consumoChart.destroy();
-      consumoChart = null;
-    }
-    return;
+/* Chart.js (~200 KB) só é baixado quando há gráfico para desenhar */
+let chartLibPromise = null;
+function loadChartLib() {
+  if (window.Chart) return Promise.resolve(window.Chart);
+  if (!chartLibPromise) {
+    chartLibPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "/chart.umd.min.js";
+      s.async = true;
+      s.onload = () => resolve(window.Chart);
+      s.onerror = () => {
+        chartLibPromise = null; // permite tentar de novo
+        s.remove();
+        reject(new Error("Falha ao carregar Chart.js"));
+      };
+      document.head.appendChild(s);
+    });
   }
+  return chartLibPromise;
+}
 
-  canvas.style.display = "block";
-  empty.style.display = "none";
+let spendChart = null;
 
-  // Build data: KML per fill-up
+// Cores dos gráficos vêm dos tokens CSS → acompanham o tema claro/escuro
+function chartTheme() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name) => css.getPropertyValue(name).trim();
+  return {
+    accent: v("--accent-blue"),
+    accentSoft: v("--chart-fill"),
+    grid: v("--chart-grid"),
+    tick: v("--text-muted"),
+    tooltipBg: v("--bg-raised"),
+    tooltipBorder: v("--border-light"),
+    tooltipTitle: v("--text-secondary"),
+    tooltipBody: v("--text-primary"),
+  };
+}
+
+function baseChartOptions(t, formatValue) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: prefersReducedMotion() ? false : undefined,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: t.tooltipBg,
+        borderColor: t.tooltipBorder,
+        borderWidth: 1,
+        titleColor: t.tooltipTitle,
+        bodyColor: t.tooltipBody,
+        callbacks: { label: (ctx) => ` ${formatValue(ctx.parsed.y)}` },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: t.tick, font: { size: 10 }, maxTicksLimit: 6 },
+        grid: { color: t.grid },
+      },
+      y: {
+        beginAtZero: false,
+        ticks: { color: t.tick, font: { size: 10 } },
+        grid: { color: t.grid },
+      },
+    },
+  };
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// km/l entre cada par de abastecimentos consecutivos
+function consumoSeries(sorted) {
   const labels = [];
   const data = [];
   for (let i = 1; i < sorted.length; i++) {
@@ -358,9 +482,98 @@ function renderChart(fuels) {
       data.push(parseFloat(kml.toFixed(2)));
     }
   }
+  return { labels, data };
+}
 
-  if (consumoChart) consumoChart.destroy();
+/**
+ * Gasto por mês: `months` meses terminando no mês atual — ou no mês do último
+ * abastecimento com preço, se ele for mais antigo (evita um gráfico só de zeros
+ * para quem ficou um tempo sem registrar).
+ */
+const MONTH_FMT = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "2-digit" });
+const fmtMonth = (d) => MONTH_FMT.format(d).replace(". de ", "/").replace(".", "");
+function monthlySpendSeries(fuels, months = 6) {
+  const priced = fuels.filter((f) => f.price > 0);
+  if (priced.length === 0) return { labels: [], data: [], hasPrice: false, isCurrent: true };
 
+  const lastKey = priced.map((f) => f.date.slice(0, 7)).sort().at(-1); // "YYYY-MM"
+  const currentKey = today().slice(0, 7);
+  const isCurrent = lastKey >= currentKey;
+  const [endY, endM] = (isCurrent ? currentKey : lastKey).split("-").map(Number);
+
+  const keys = [];
+  const labels = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(endY, endM - 1 - i, 1);
+    keys.push(localISO(d).slice(0, 7));
+    labels.push(fmtMonth(d));
+  }
+  const totals = Object.fromEntries(keys.map((k) => [k, 0]));
+  priced.forEach((f) => {
+    const key = f.date.slice(0, 7);
+    if (key in totals) totals[key] += f.liters * f.price;
+  });
+  return {
+    labels,
+    data: keys.map((k) => +totals[k].toFixed(2)),
+    hasPrice: true,
+    isCurrent,
+    endLabel: labels.at(-1),
+  };
+}
+
+function destroyChart(which) {
+  if (which === "consumo" && consumoChart) {
+    consumoChart.destroy();
+    consumoChart = null;
+  }
+  if (which === "spend" && spendChart) {
+    spendChart.destroy();
+    spendChart = null;
+  }
+}
+
+function renderCharts(fuels) {
+  const renderId = ++chartRenderId;
+  const sorted = [...fuels].sort((a, b) => a.odometer - b.odometer);
+
+  const consumoCanvas = document.getElementById("consumoChart");
+  const consumoEmpty = document.getElementById("chartEmpty");
+  const spendCanvas = document.getElementById("spendChart");
+  const spendEmpty = document.getElementById("spendChartEmpty");
+
+  const consumo = consumoSeries(sorted);
+  const spend = monthlySpendSeries(sorted);
+  const showConsumo = consumo.data.length > 0;
+  const showSpend = spend.hasPrice;
+
+  const toggle = (canvas, empty, show, name) => {
+    canvas.style.display = show ? "block" : "none";
+    empty.style.display = show ? "none" : "flex";
+    if (!show) destroyChart(name);
+  };
+  toggle(consumoCanvas, consumoEmpty, showConsumo, "consumo");
+  toggle(spendCanvas, spendEmpty, showSpend, "spend");
+  document.getElementById("spendBadge").textContent =
+    showSpend && !spend.isCurrent ? `6 meses até ${spend.endLabel}` : "últimos 6 meses";
+  if (!showConsumo && !showSpend) return;
+
+  loadChartLib()
+    .then((Chart) => {
+      if (renderId !== chartRenderId) return; // um render mais novo assumiu
+      const t = chartTheme();
+      if (showConsumo) drawConsumoChart(Chart, consumoCanvas, consumo, t);
+      if (showSpend) drawSpendChart(Chart, spendCanvas, spend, t);
+    })
+    .catch(() => {
+      if (renderId !== chartRenderId) return;
+      toggle(consumoCanvas, consumoEmpty, false, "consumo");
+      toggle(spendCanvas, spendEmpty, false, "spend");
+    });
+}
+
+function drawConsumoChart(Chart, canvas, { labels, data }, t) {
+  destroyChart("consumo");
   consumoChart = new Chart(canvas, {
     type: "line",
     data: {
@@ -369,49 +582,82 @@ function renderChart(fuels) {
         {
           label: "km/l",
           data,
-          borderColor: "#3B82F6",
-          backgroundColor: "rgba(59,130,246,.1)",
+          borderColor: t.accent,
+          backgroundColor: t.accentSoft,
           borderWidth: 2,
           pointRadius: 4,
-          pointBackgroundColor: "#3B82F6",
+          pointBackgroundColor: t.accent,
           tension: 0.35,
           fill: true,
         },
       ],
     },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: "#1D2F42",
-          borderColor: "#243650",
-          borderWidth: 1,
-          titleColor: "#94A3B8",
-          bodyColor: "#E2E8F0",
-          callbacks: {
-            label: (ctx) => ` ${ctx.parsed.y} km/l`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: "#4B6280", font: { size: 10 }, maxTicksLimit: 6 },
-          grid: { color: "rgba(255,255,255,.04)" },
-        },
-        y: {
-          ticks: {
-            color: "#4B6280",
-            font: { size: 10 },
-            callback: (v) => `${v}`,
-          },
-          grid: { color: "rgba(255,255,255,.04)" },
-        },
-      },
-    },
+    options: baseChartOptions(t, (v) => `${v} km/l`),
   });
+}
+
+function drawSpendChart(Chart, canvas, { labels, data }, t) {
+  destroyChart("spend");
+  const options = baseChartOptions(t, fmtMoney);
+  options.scales.y.beginAtZero = true;
+  options.scales.y.ticks.callback = (v) => `R$ ${v}`;
+  spendChart = new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Gasto",
+          data,
+          backgroundColor: t.accent,
+          borderRadius: 4,
+          maxBarThickness: 36,
+        },
+      ],
+    },
+    options,
+  });
+}
+
+/* ═══════════════════════════════
+   INDICADORES DE CUSTO
+═══════════════════════════════ */
+/**
+ * Calcula custos a partir dos abastecimentos (ordenados por km).
+ * - Preço médio: ponderado por litros, só abastecimentos com preço.
+ * - Custo/km: combustível gasto entre o 1º e o último abastecimento
+ *   (o 1º encheu o tanque antes do período, então não entra) ÷ km rodados.
+ *   Abastecimentos sem preço usam o preço médio.
+ */
+function calcFuelCosts(sorted) {
+  const priced = sorted.filter((f) => f.price > 0);
+  const pricedLiters = priced.reduce((s, f) => s + f.liters, 0);
+  const avgPrice =
+    pricedLiters > 0
+      ? priced.reduce((s, f) => s + f.liters * f.price, 0) / pricedLiters
+      : null;
+
+  let costPerKm = null;
+  if (avgPrice !== null && sorted.length >= 2) {
+    const km = sorted[sorted.length - 1].odometer - sorted[0].odometer;
+    const cost = sorted
+      .slice(1)
+      .reduce((s, f) => s + f.liters * (f.price > 0 ? f.price : avgPrice), 0);
+    if (km > 0) costPerKm = cost / km;
+  }
+
+  const month = today().slice(0, 7);
+  const thisMonth = sorted.filter((f) => f.date.startsWith(month));
+  const monthSpend = thisMonth.reduce((s, f) => s + (f.price > 0 ? f.liters * f.price : 0), 0);
+  const lastPriced = [...priced].sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  return {
+    avgPrice,
+    costPerKm,
+    monthSpend,
+    monthRefills: thisMonth.length,
+    lastPrice: lastPriced ? lastPriced.price : null,
+  };
 }
 
 /* ═══════════════════════════════
@@ -428,7 +674,7 @@ function renderDashboard() {
     return;
   }
   emptyState.style.display = "none";
-  dashContent.style.display = "block";
+  dashContent.style.display = ""; // volta ao layout do CSS (grid no desktop)
 
   const car = getSelectedCar();
   if (!car) return;
@@ -437,6 +683,7 @@ function renderDashboard() {
     (a, b) => a.odometer - b.odometer,
   );
   const maints = DB.getMaintsForCar(car.id);
+  const setText = (id, text) => (document.getElementById(id).textContent = text);
 
   // KPIs
   const avg = calcAvgKml(fuels);
@@ -444,28 +691,80 @@ function renderDashboard() {
     avg !== null
       ? `${fmt(avg)} <span class="kpi-unit">km/l</span>`
       : `— <span class="kpi-unit">km/l</span>`;
-  document.getElementById("kpiRefills").textContent =
-    `${fuels.length} abastecimento${fuels.length !== 1 ? "s" : ""} registrado${fuels.length !== 1 ? "s" : ""}`;
+  setText(
+    "kpiRefills",
+    `${fuels.length} abastecimento${fuels.length !== 1 ? "s" : ""} registrado${fuels.length !== 1 ? "s" : ""}`,
+  );
 
   const lastFuel = fuels[fuels.length - 1];
-  document.getElementById("kpiLastOdo").textContent = lastFuel
-    ? lastFuel.odometer.toLocaleString("pt-BR")
-    : car.odometer.toLocaleString("pt-BR");
-  document.getElementById("kpiLastFuel").textContent = lastFuel
-    ? `${fmt(lastFuel.liters, 1)}L`
-    : "—";
-  document.getElementById("kpiLastDate").textContent = lastFuel
-    ? fmtDate(lastFuel.date)
-    : "—";
+  setText(
+    "kpiLastOdo",
+    (lastFuel ? lastFuel.odometer : car.odometer).toLocaleString("pt-BR"),
+  );
+  setText("kpiLastFuel", lastFuel ? `${fmt(lastFuel.liters, 1)}L` : "—");
+  setText("kpiLastDate", lastFuel ? fmtDate(lastFuel.date) : "—");
 
-  // Chart
-  renderChart(fuels);
+  const costs = calcFuelCosts(fuels);
+  setText("kpiCostKm", costs.costPerKm !== null ? fmtMoney(costs.costPerKm) : "—");
+  setText(
+    "kpiCostKmSub",
+    costs.costPerKm !== null ? "só combustível" : "precisa de 2 abastecimentos com preço",
+  );
+  setText("kpiMonthSpend", fmtMoney(costs.monthSpend));
+  setText(
+    "kpiMonthSub",
+    `${costs.monthRefills} abastecimento${costs.monthRefills !== 1 ? "s" : ""} este mês`,
+  );
+  setText("kpiAvgPrice", costs.avgPrice !== null ? fmtMoney(costs.avgPrice) : "—");
+  setText(
+    "kpiAvgPriceSub",
+    costs.lastPrice !== null ? `último: ${fmtMoney(costs.lastPrice)}` : "informe o preço ao abastecer",
+  );
+
+  // Charts
+  renderCharts(fuels);
 
   // Maintenance cards
-  renderDashboardMaint(maints, car);
+  renderDashboardMaint(maints, car, fuels);
 }
 
-function renderDashboardMaint(maints, car) {
+/* ── Previsão por quilometragem ───────────────── */
+/**
+ * KM atual do carro e ritmo de uso (km/dia) estimado pelos abastecimentos.
+ * O ritmo só é calculado com pelo menos 7 dias de histórico.
+ */
+function carUsage(car, fuels) {
+  const byOdo = [...fuels].sort((a, b) => a.odometer - b.odometer);
+  const last = byOdo[byOdo.length - 1];
+  const currentKm = Math.max(car.odometer || 0, last ? last.odometer : 0);
+
+  let kmPerDay = null;
+  if (byOdo.length >= 2) {
+    const first = byOdo[0];
+    const days = (Date.parse(last.date) - Date.parse(first.date)) / 864e5;
+    const km = last.odometer - first.odometer;
+    if (days >= 7 && km > 0) kmPerDay = km / days;
+  }
+  return { currentKm, kmPerDay };
+}
+
+/** Situação de uma manutenção pela KM: null se ela não tem KM definida. */
+function maintKmStatus(m, usage) {
+  const target = parseInt(m.km);
+  if (!target) return null;
+  const remaining = target - usage.currentKm;
+  if (remaining <= 0) {
+    return { overdue: true, soon: true, text: "KM atingida" };
+  }
+  let text = `faltam ${remaining.toLocaleString("pt-BR")} km`;
+  if (usage.kmPerDay) {
+    const days = Math.round(remaining / usage.kmPerDay);
+    text += days <= 1 ? " (≈ 1 dia)" : ` (≈ ${days} dias)`;
+  }
+  return { overdue: false, soon: remaining <= 1000, text };
+}
+
+function renderDashboardMaint(maints, car, fuels = DB.getFuelsForCar(car.id)) {
   const grid = document.getElementById("maintenanceGrid");
   const empty = document.getElementById("maintEmpty");
 
@@ -482,35 +781,47 @@ function renderDashboardMaint(maints, car) {
   }
   empty.style.display = "none";
 
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0]; // 'YYYY-MM-DD' string compare
+  const todayStr = today(); // "YYYY-MM-DD" local, comparável como string
+  const in7 = addDays(todayStr, 7);
+  const in30 = addDays(todayStr, 30);
+  const usage = carUsage(car, fuels);
 
   const frag = document.createDocumentFragment();
   pending.forEach((m) => {
     let cls = "maint-card--ok";
     let status = "Em dia";
-    // Compare ISO date strings directly (no new Date in loop)
     if (m.date < todayStr) {
-      // Vencida
-      const d = new Date(m.date + "T00:00:00"); // only compute diff when needed
-      const diff = Math.ceil((d - now) / 864e5);
       cls = "maint-card--urgent";
-      status = diff < 0 ? "Vencida" : `Vence em ${diff}d`;
-    } else if (m.date <= addDays(todayStr, 7)) {
+      status = "Vencida";
+    } else if (m.date <= in7) {
       cls = "maint-card--urgent";
       status = `Vence em ${daysUntil(m.date)}d`;
-    } else if (m.date <= addDays(todayStr, 30)) {
+    } else if (m.date <= in30) {
       cls = "maint-card--upcoming";
       status = `Em ${daysUntil(m.date)} dias`;
+    }
+
+    // A KM pode antecipar a urgência (ex.: troca de óleo por quilometragem)
+    const kmStatus = maintKmStatus(m, usage);
+    if (kmStatus?.overdue && cls !== "maint-card--urgent") {
+      cls = "maint-card--urgent";
+      status = "KM atingida";
+    } else if (kmStatus?.soon && cls === "maint-card--ok") {
+      cls = "maint-card--upcoming";
+      status = "KM próxima";
     }
 
     const card = document.createElement("div");
     card.className = `maint-card ${cls}`;
     card.innerHTML = `
       <div class="maint-card__stripe"></div>
-      <div class="maint-card__type">${m.type}</div>
-      <div class="maint-card__date">📅 ${fmtDate(m.date)}</div>
-      ${m.km ? `<div class="maint-card__km">🔢 ${parseInt(m.km).toLocaleString("pt-BR")} km</div>` : ""}
+      <div class="maint-card__type">${esc(m.type)}</div>
+      <div class="maint-card__date">${icon("calendar")} ${fmtDate(m.date)}</div>
+      ${
+        kmStatus
+          ? `<div class="maint-card__km">${icon("gauge")} ${parseInt(m.km).toLocaleString("pt-BR")} km · ${kmStatus.text}</div>`
+          : ""
+      }
       <div class="maint-card__status">${status}</div>
     `;
     frag.appendChild(card);
@@ -522,7 +833,7 @@ function renderDashboardMaint(maints, car) {
 function addDays(isoStr, days) {
   const d = new Date(isoStr + "T00:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  return localISO(d);
 }
 function daysUntil(isoStr) {
   const d = new Date(isoStr + "T00:00:00");
@@ -555,19 +866,20 @@ function renderGarageScreen() {
     const card = document.createElement("div");
     card.className = `car-card${car.id === selectedId ? " car-card--selected" : ""}`;
     card.dataset.id = car.id;
+    const carId = esc(car.id);
     card.innerHTML = `
-      <div class="car-card__avatar">${car.emoji}</div>
+      <div class="car-card__avatar">${esc(car.emoji)}</div>
       <div class="car-card__info">
-        <div class="car-card__name">${car.name}</div>
+        <div class="car-card__name">${esc(car.name)}</div>
         <div class="car-card__sub">
-          ${car.model} · ${car.year} · <span class="car-pill">${car.fuel}</span>
+          ${esc(car.model)} · ${esc(car.year)} · <span class="car-pill">${esc(car.fuel)}</span>
           ${avg !== null ? `· <strong style="color:var(--accent-green)">${fmt(avg)} km/l</strong>` : ""}
         </div>
       </div>
       <div class="car-card__actions">
-        <button class="btn btn--ghost btn--sm" data-action="select" data-id="${car.id}">Selecionar</button>
-        <button class="icon-btn" data-action="edit" data-id="${car.id}" title="Editar">✏️</button>
-        <button class="icon-btn" data-action="delete" data-id="${car.id}" title="Excluir">🗑️</button>
+        <button class="btn btn--ghost btn--sm" data-action="select" data-id="${carId}">Selecionar</button>
+        <button class="icon-btn" data-action="edit" data-id="${carId}" title="Editar" aria-label="Editar">${icon("edit")}</button>
+        <button class="icon-btn icon-btn--danger" data-action="delete" data-id="${carId}" title="Excluir" aria-label="Excluir">${icon("trash")}</button>
       </div>
     `;
     frag.appendChild(card);
@@ -694,21 +1006,31 @@ document.getElementById("carList").addEventListener("click", (e) => {
       "Excluir veículo",
       "Todos os dados de abastecimento e manutenção deste veículo também serão excluídos. Continuar?",
       () => {
-        let cars = DB.getCars().filter((c) => c.id !== id);
-        let fuels = DB.getFuels().filter((f) => f.carId !== id);
-        let maints = DB.getMaints().filter((m) => m.carId !== id);
+        const before = {
+          cars: DB.getCars(),
+          fuels: DB.getFuels(),
+          maints: DB.getMaints(),
+          selected: DB.getSelectedCar(),
+        };
+        const cars = before.cars.filter((c) => c.id !== id);
         DB.saveCars(cars);
-        DB.saveFuels(fuels);
-        DB.saveMaints(maints);
+        DB.saveFuels(before.fuels.filter((f) => f.carId !== id));
+        DB.saveMaints(before.maints.filter((m) => m.carId !== id));
 
         // Reset selection
-        if (DB.getSelectedCar() === id) {
+        if (before.selected === id) {
           DB.setSelectedCar(cars[0]?.id || null);
         }
         rebuildCarSelector();
         invalidateCarScreens(); // marca telas dependentes como sujas
         renderGarageScreen();
-        showToast("Veículo excluído.", "info");
+        showUndoToast("Veículo excluído.", () => {
+          DB.saveCars(before.cars);
+          DB.saveFuels(before.fuels);
+          DB.saveMaints(before.maints);
+          DB.setSelectedCar(before.selected);
+          rebuildCarSelector();
+        });
       },
     );
   }
@@ -732,7 +1054,7 @@ function renderFuelScreen() {
 
   // Context header
   document.getElementById("fuelCarContext").innerHTML =
-    `${car.emoji} Abastecendo: <strong>${car.name}</strong> &mdash; ${car.model} ${car.year}`;
+    `${esc(car.emoji)} Abastecendo: <strong>${esc(car.name)}</strong> &mdash; ${esc(car.model)} ${esc(car.year)}`;
 
   // Set today's date
   document.getElementById("fuelDate").value =
@@ -772,11 +1094,11 @@ function renderFuelHistory(carId, fuels) {
     const item = document.createElement("div");
     item.className = "fuel-history-item";
     item.innerHTML = `
-      <div class="fuel-history-item__icon">⛽</div>
+      <div class="fuel-history-item__icon">${icon("fuel")}</div>
       <div class="fuel-history-item__info">
         <div class="fuel-history-item__main">
           ${f.liters.toFixed(1)}L — ${fmtDate(f.date)}
-          ${f.station ? `<small style="color:var(--text-muted)"> · ${f.station}</small>` : ""}
+          ${f.station ? `<small style="color:var(--text-muted)"> · ${esc(f.station)}</small>` : ""}
         </div>
         <div class="fuel-history-item__sub">
           ${f.odometer.toLocaleString("pt-BR")} km
@@ -786,7 +1108,7 @@ function renderFuelHistory(carId, fuels) {
       <div class="fuel-history-item__kml">
         ${kml !== null ? `${fmt(kml)} <span>km/l</span>` : "<span>—</span>"}
       </div>
-      <button class="icon-btn" data-action="deletefuel" data-id="${f.id}" title="Excluir">🗑️</button>
+      <button class="icon-btn icon-btn--danger" data-action="deletefuel" data-id="${esc(f.id)}" title="Excluir" aria-label="Excluir">${icon("trash")}</button>
     `;
     frag.appendChild(item);
   });
@@ -903,17 +1225,13 @@ document.getElementById("btnClearFuel").addEventListener("click", () => {
 document.getElementById("fuelHistoryList").addEventListener("click", (e) => {
   const btn = e.target.closest('[data-action="deletefuel"]');
   if (!btn) return;
-  showConfirm(
-    "Excluir abastecimento",
-    "Isso irá remover este registro permanentemente.",
-    () => {
-      const fuels = DB.getFuels().filter((f) => f.id !== btn.dataset.id);
-      DB.saveFuels(fuels);
-      invalidateFuelScreens(); // dashboard + fuel precisam atualizar
-      renderFuelScreen();
-      showToast("Registro excluído.", "info");
-    },
-  );
+  const before = DB.getFuels();
+  DB.saveFuels(before.filter((f) => f.id !== btn.dataset.id));
+  invalidateFuelScreens(); // dashboard + fuel precisam atualizar
+  renderFuelScreen();
+  showUndoToast("Abastecimento excluído.", () => {
+    DB.saveFuels(before);
+  });
 });
 
 /* ═══════════════════════════════
@@ -944,10 +1262,10 @@ function renderMaintScreen() {
   }
   emptyEl.style.display = "none";
 
-  const now = new Date();
-  const todayStr = now.toISOString().split("T")[0];
+  const todayStr = today();
   const in7 = addDays(todayStr, 7);
   const in30 = addDays(todayStr, 30);
+  const usage = carUsage(car, DB.getFuelsForCar(car.id));
 
   const frag = document.createDocumentFragment();
   maints.forEach((m) => {
@@ -956,10 +1274,10 @@ function renderMaintScreen() {
 
     if (m.resolved) {
       stripeColor = "var(--text-muted)";
-      statusLabel = "✔ Concluído";
+      statusLabel = "Concluída";
     } else if (m.date < todayStr) {
       stripeColor = "var(--accent-red)";
-      statusLabel = "⚠ Vencida";
+      statusLabel = "Vencida";
     } else if (m.date <= in7) {
       stripeColor = "var(--accent-red)";
       statusLabel = `Faltam ${daysUntil(m.date)}d`;
@@ -967,23 +1285,28 @@ function renderMaintScreen() {
       stripeColor = "var(--accent-amber)";
       statusLabel = `Em ${daysUntil(m.date)} dias`;
     }
+    const kmStatus = m.resolved ? null : maintKmStatus(m, usage);
+    if (kmStatus?.overdue && stripeColor !== "var(--accent-red)") {
+      stripeColor = "var(--accent-red)";
+      statusLabel = "KM atingida";
+    }
 
     const item = document.createElement("div");
     item.className = "maint-list-item";
     item.innerHTML = `
       <div class="maint-list-item__stripe" style="background:${stripeColor}"></div>
       <div class="maint-list-item__info">
-        <div class="maint-list-item__type">${m.type}</div>
+        <div class="maint-list-item__type">${esc(m.type)}</div>
         <div class="maint-list-item__meta">
-          📅 ${fmtDate(m.date)}
-          ${m.km ? ` · 🔢 ${parseInt(m.km).toLocaleString("pt-BR")} km` : ""}
+          ${icon("calendar")} ${fmtDate(m.date)}
+          ${m.km ? ` · ${icon("gauge")} ${parseInt(m.km).toLocaleString("pt-BR")} km${kmStatus && !kmStatus.overdue ? ` (${kmStatus.text})` : ""}` : ""}
           · <span style="color:${stripeColor}">${statusLabel}</span>
-          ${m.notes ? `<br><small style="color:var(--text-muted)">${m.notes}</small>` : ""}
+          ${m.notes ? `<br><small style="color:var(--text-muted)">${esc(m.notes)}</small>` : ""}
         </div>
       </div>
       <div class="maint-list-item__actions">
-        ${!m.resolved ? `<button class="btn btn--ghost btn--sm" data-action="resolve" data-id="${m.id}">✔</button>` : ""}
-        <button class="icon-btn" data-action="deletemaint" data-id="${m.id}" title="Excluir">🗑️</button>
+        ${!m.resolved ? `<button class="btn btn--ghost btn--sm" data-action="resolve" data-id="${esc(m.id)}" title="Marcar como feita" aria-label="Marcar como feita">${icon("check")}</button>` : ""}
+        <button class="icon-btn icon-btn--danger" data-action="deletemaint" data-id="${esc(m.id)}" title="Excluir" aria-label="Excluir">${icon("trash")}</button>
       </div>
     `;
     frag.appendChild(item);
@@ -1086,17 +1409,13 @@ document.getElementById("maintList").addEventListener("click", (e) => {
   }
 
   if (action === "deletemaint") {
-    showConfirm(
-      "Excluir manutenção",
-      "Remover este agendamento permanentemente?",
-      () => {
-        const maints = DB.getMaints().filter((m) => m.id !== id);
-        DB.saveMaints(maints);
-        invalidateMaintScreens(); // dashboard + maintenance precisam atualizar
-        renderMaintScreen();
-        showToast("Manutenção removida.", "info");
-      },
-    );
+    const before = DB.getMaints();
+    DB.saveMaints(before.filter((m) => m.id !== id));
+    invalidateMaintScreens(); // dashboard + maintenance precisam atualizar
+    renderMaintScreen();
+    showUndoToast("Manutenção excluída.", () => {
+      DB.saveMaints(before);
+    });
   }
 });
 
@@ -1398,6 +1717,246 @@ const PTR = (() => {
 })();
 
 /* ═══════════════════════════════
+   BACKUP — EXPORTAR / IMPORTAR
+   O arquivo importado é tratado como não confiável: cada registro é
+   reconstruído campo a campo (só campos conhecidos, tipos e tamanhos
+   checados) e registros órfãos são descartados.
+═══════════════════════════════ */
+const Backup = (() => {
+  const FORMAT = "autogest-backup";
+  const VERSION = 1;
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const MAX_RECORDS = 20000;
+  const FUEL_TYPES = ["flex", "gasolina", "etanol", "diesel", "elétrico"];
+  const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  // ── Validadores de campo ──
+  const str = (v, max, required = false) => {
+    if (v === undefined || v === null || v === "") {
+      if (required) throw new Error("campo obrigatório ausente");
+      return "";
+    }
+    if (typeof v !== "string") throw new Error("texto inválido");
+    const s = v.trim();
+    if (s.length > max) throw new Error("texto longo demais");
+    if (required && !s) throw new Error("campo obrigatório vazio");
+    return s;
+  };
+  const num = (v, { min = 0, max = 1e9, int = false, optional = false } = {}) => {
+    if (optional && (v === undefined || v === null || v === "")) return null;
+    const n = typeof v === "string" ? Number(v) : v;
+    if (typeof n !== "number" || !Number.isFinite(n)) throw new Error("número inválido");
+    if (n < min || n > max) throw new Error("número fora do intervalo");
+    return int ? Math.round(n) : n;
+  };
+  const id = (v) => {
+    if (typeof v !== "string" || !ID_RE.test(v)) throw new Error("id inválido");
+    return v;
+  };
+  const date = (v) => {
+    if (typeof v !== "string" || !DATE_RE.test(v) || isNaN(Date.parse(v)))
+      throw new Error("data inválida");
+    return v;
+  };
+  const ts = (v) => num(v, { min: 0, max: 8.64e15, int: true, optional: true });
+
+  // ── Reconstrução de cada registro (descarta campos desconhecidos) ──
+  function cleanCar(c) {
+    const fuel = FUEL_TYPES.includes(c.fuel) ? c.fuel : "flex";
+    const car = {
+      id: id(c.id),
+      name: str(c.name, 40, true),
+      model: str(c.model, 50, true),
+      year: num(c.year, { min: 1900, max: 2100, int: true }),
+      plate: str(c.plate, 8).toUpperCase(),
+      fuel,
+      odometer: num(c.odometer ?? 0, { max: 1e7, int: true }),
+      emoji: carEmoji(fuel), // nunca confia no emoji do arquivo
+    };
+    const createdAt = ts(c.createdAt);
+    const updatedAt = ts(c.updatedAt);
+    if (createdAt !== null) car.createdAt = createdAt;
+    if (updatedAt !== null) car.updatedAt = updatedAt;
+    return car;
+  }
+  function cleanFuel(f) {
+    const fuel = {
+      id: id(f.id),
+      carId: id(f.carId),
+      date: date(f.date),
+      odometer: num(f.odometer, { min: 1, max: 1e7, int: true }),
+      liters: num(f.liters, { min: 0.01, max: 10000 }),
+      price: num(f.price, { max: 1000, optional: true }),
+      station: str(f.station, 60),
+    };
+    const createdAt = ts(f.createdAt);
+    if (createdAt !== null) fuel.createdAt = createdAt;
+    return fuel;
+  }
+  function cleanMaint(m) {
+    const maint = {
+      id: id(m.id),
+      carId: id(m.carId),
+      type: str(m.type, 60, true),
+      date: date(m.date),
+      km: num(m.km, { max: 1e7, int: true, optional: true }),
+      notes: str(m.notes, 500),
+      resolved: m.resolved === true,
+    };
+    const createdAt = ts(m.createdAt);
+    if (createdAt !== null) maint.createdAt = createdAt;
+    return maint;
+  }
+
+  // Valida a lista inteira; um registro inválido invalida o arquivo
+  function cleanList(list, cleaner, label) {
+    if (!Array.isArray(list)) throw new Error(`"${label}" não é uma lista`);
+    if (list.length > MAX_RECORDS) throw new Error(`"${label}" tem registros demais`);
+    const seen = new Set();
+    return list.map((raw, i) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        throw new Error(`${label} #${i + 1}: registro inválido`);
+      let rec;
+      try {
+        rec = cleaner(raw);
+      } catch (err) {
+        throw new Error(`${label} #${i + 1}: ${err.message}`);
+      }
+      if (seen.has(rec.id)) throw new Error(`${label} #${i + 1}: id repetido`);
+      seen.add(rec.id);
+      return rec;
+    });
+  }
+
+  function parseBackup(text) {
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error("o arquivo não é um JSON válido");
+    }
+    if (!json || json.format !== FORMAT || typeof json.data !== "object" || !json.data)
+      throw new Error("o arquivo não é um backup do AutoGest");
+    if (json.version !== VERSION)
+      throw new Error(`versão de backup não suportada (${String(json.version).slice(0, 10)})`);
+
+    const d = json.data;
+    const cars = cleanList(d.cars ?? [], cleanCar, "Veículo");
+    const carIds = new Set(cars.map((c) => c.id));
+    // Descarta abastecimentos/manutenções de veículos que não existem
+    const fuels = cleanList(d.fuels ?? [], cleanFuel, "Abastecimento").filter((f) =>
+      carIds.has(f.carId),
+    );
+    const maints = cleanList(d.maints ?? [], cleanMaint, "Manutenção").filter((m) =>
+      carIds.has(m.carId),
+    );
+    const selected =
+      typeof d.selected === "string" && carIds.has(d.selected)
+        ? d.selected
+        : cars[0]?.id ?? null;
+
+    return { cars, fuels, maints, selected };
+  }
+
+  // Grava tudo ou nada: se o localStorage falhar no meio, restaura o anterior
+  function writeAll(data) {
+    const keys = ["cars", "fuels", "maints", "selected"];
+    const previous = keys.map((k) => localStorage.getItem(DB.KEYS[k]));
+    try {
+      keys.forEach((k) => localStorage.setItem(DB.KEYS[k], JSON.stringify(data[k])));
+      localStorage.setItem("ag_seeded", "1"); // não recriar dados de exemplo
+    } catch (err) {
+      keys.forEach((k, i) => {
+        if (previous[i] === null) localStorage.removeItem(DB.KEYS[k]);
+        else localStorage.setItem(DB.KEYS[k], previous[i]);
+      });
+      throw new Error("sem espaço para salvar os dados neste navegador");
+    } finally {
+      keys.forEach((k) => DB.invalidate(k));
+    }
+  }
+
+  function refreshAllScreens() {
+    rebuildCarSelector();
+    Object.keys(renderState).forEach(markDirty);
+    renderCurrentScreen();
+  }
+
+  function exportData() {
+    const payload = {
+      format: FORMAT,
+      version: VERSION,
+      exportedAt: new Date().toISOString(),
+      data: {
+        cars: DB.getCars(),
+        fuels: DB.getFuels(),
+        maints: DB.getMaints(),
+        selected: DB.getSelectedCar(),
+      },
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `autogest-backup-${today()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("Backup exportado!");
+  }
+
+  async function importFile(file) {
+    if (!file) return;
+    if (file.size > MAX_FILE_BYTES) {
+      showToast("Arquivo grande demais (máx. 5 MB).", "error", 4000);
+      return;
+    }
+    let data;
+    try {
+      data = parseBackup(await file.text());
+    } catch (err) {
+      showToast(`Backup inválido: ${err.message}.`, "error", 5000);
+      return;
+    }
+
+    const resumo = `${data.cars.length} veículo(s), ${data.fuels.length} abastecimento(s) e ${data.maints.length} manutenção(ões)`;
+    showConfirm(
+      "Importar backup?",
+      `O backup tem ${resumo}. Os dados atuais deste aparelho serão substituídos.`,
+      () => {
+        try {
+          writeAll(data);
+        } catch (err) {
+          showToast(`Não foi possível importar: ${err.message}.`, "error", 5000);
+          return;
+        }
+        refreshAllScreens();
+        showToast("Backup importado!");
+      },
+    );
+  }
+
+  function init() {
+    const input = document.getElementById("importFile");
+    document.getElementById("btnExportData").addEventListener("click", exportData);
+    document
+      .getElementById("btnImportData")
+      .addEventListener("click", () => input.click());
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      input.value = ""; // permite escolher o mesmo arquivo de novo
+      importFile(file);
+    });
+  }
+
+  return { init, parseBackup };
+})();
+
+/* ═══════════════════════════════
    INIT
 ═══════════════════════════════ */
 function init() {
@@ -1422,6 +1981,23 @@ function init() {
 
   // Initialize pull-to-refresh (gerencia internamente mobile vs desktop)
   PTR.init();
+
+  Backup.init();
+
+  // Tema claro/escuro do sistema mudou: gráficos precisam pegar as novas cores
+  window
+    .matchMedia("(prefers-color-scheme: light)")
+    .addEventListener("change", () => {
+      markDirty("dashboard");
+      renderCurrentScreen();
+    });
+
+  // Pede ao navegador para não apagar o localStorage quando faltar espaço
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then((ok) => {
+      if (!ok) navigator.storage.persist().catch(() => {});
+    });
+  }
 }
 
 function seedDemoData() {
@@ -1539,7 +2115,7 @@ function seedDemoData() {
       id: uid(),
       carId,
       type: "Troca de óleo",
-      date: inFiveDays.toISOString().split("T")[0],
+      date: localISO(inFiveDays),
       km: "73000",
       notes: "Usar óleo 5W30 semissintético",
       resolved: false,
@@ -1549,7 +2125,7 @@ function seedDemoData() {
       id: uid(),
       carId,
       type: "Alinhamento/Balanceamento",
-      date: inTwentyDays.toISOString().split("T")[0],
+      date: localISO(inTwentyDays),
       km: "75000",
       notes: "",
       resolved: false,
@@ -1559,7 +2135,7 @@ function seedDemoData() {
       id: uid(),
       carId,
       type: "Revisão geral",
-      date: overdue.toISOString().split("T")[0],
+      date: localISO(overdue),
       km: "72000",
       notes: "Verificar freios traseiros",
       resolved: false,
