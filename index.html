@@ -86,6 +86,10 @@
           <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z" />
           <circle cx="12" cy="13" r="3.5" />
         </symbol>
+        <symbol id="i-report" viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+          <path d="M14 2v6h6M8 13h8M8 17h5" />
+        </symbol>
         <symbol id="i-bolt" viewBox="0 0 24 24">
           <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z" />
         </symbol>
@@ -166,6 +170,23 @@
             </svg>
           </span>
           <span class="nav-label">Manutenção</span>
+        </button>
+
+        <button class="nav-item" data-screen="report">
+          <span class="nav-icon">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+              <path d="M14 2v6h6M8 13h8M8 17h5" />
+            </svg>
+          </span>
+          <span class="nav-label">Relatório</span>
         </button>
       </nav>
 
@@ -455,6 +476,16 @@
                     min="0"
                   />
                 </div>
+                <div class="field">
+                  <label for="carUsage">Uso</label>
+                  <select id="carUsage" aria-describedby="carUsageHint">
+                    <option value="pessoal">Pessoal</option>
+                    <option value="trabalho">Trabalho</option>
+                  </select>
+                  <small class="field-hint" id="carUsageHint"
+                    >Veículos de trabalho aparecem no Relatório.</small
+                  >
+                </div>
               </div>
               <div class="form-actions">
                 <button class="btn btn--ghost" id="btnCancelCar">
@@ -710,6 +741,143 @@
               </div>
             </div>
           </section>
+
+          <!-- ─── SCREEN: RELATÓRIO ─────────────────── -->
+          <section class="screen" id="screen-report">
+            <div class="section-header section-header--top report-header">
+              <h2>Prestação de contas</h2>
+              <div class="report-actions" id="reportActions">
+                <button class="btn btn--ghost btn--sm" id="btnReportCsv">
+                  Baixar planilha
+                </button>
+                <button class="btn btn--primary btn--sm" id="btnReportPrint">
+                  Imprimir / salvar PDF
+                </button>
+              </div>
+            </div>
+
+            <!-- Sem veículo de trabalho -->
+            <div class="empty-state" id="reportEmpty" style="display: none">
+              <h2>Nenhum veículo de trabalho</h2>
+              <p>
+                Marque um veículo como <strong>Trabalho</strong> na Garagem para
+                montar o relatório de reembolso.
+              </p>
+              <button class="btn btn--primary" data-screen="garage">
+                Ir para Garagem
+              </button>
+            </div>
+
+            <div id="reportContent">
+              <!-- Filtros (não saem na impressão) -->
+              <div class="form-card report-filters">
+                <div class="report-filters__row">
+                  <div class="field" id="reportCarField">
+                    <label for="reportCar">Veículo</label>
+                    <select id="reportCar"></select>
+                  </div>
+                  <fieldset class="field report-period">
+                    <legend>Período</legend>
+                    <div class="segmented" role="radiogroup">
+                      <label
+                        ><input type="radio" name="reportPeriod" value="this" checked />
+                        <span>Este mês</span></label
+                      >
+                      <label
+                        ><input type="radio" name="reportPeriod" value="last" />
+                        <span>Mês passado</span></label
+                      >
+                      <label
+                        ><input type="radio" name="reportPeriod" value="custom" />
+                        <span>Personalizado</span></label
+                      >
+                    </div>
+                  </fieldset>
+                  <div class="report-custom" id="reportCustom" hidden>
+                    <div class="field">
+                      <label for="reportFrom">De</label>
+                      <input type="date" id="reportFrom" />
+                    </div>
+                    <div class="field">
+                      <label for="reportTo">Até</label>
+                      <input type="date" id="reportTo" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="report-identity">
+                  <label class="check">
+                    <input type="checkbox" id="reportIncludeId" />
+                    <span>Incluir nome e empresa no relatório</span>
+                  </label>
+                  <div class="report-identity__fields" id="reportIdFields" hidden>
+                    <div class="field">
+                      <label for="reportName">Seu nome</label>
+                      <input type="text" id="reportName" maxlength="80" autocomplete="name" />
+                    </div>
+                    <div class="field">
+                      <label for="reportCompany">Empresa / CNPJ</label>
+                      <input type="text" id="reportCompany" maxlength="100" autocomplete="organization" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Documento (é o que sai na impressão) -->
+              <article class="report-doc" id="reportDoc" aria-labelledby="reportDocTitle">
+                <header class="report-doc__head">
+                  <h3 id="reportDocTitle">Prestação de contas</h3>
+                  <p id="reportDocMeta"></p>
+                  <p id="reportDocId" hidden></p>
+                </header>
+
+                <div class="report-summary">
+                  <div class="kpi-card">
+                    <span class="kpi-label">Combustível</span>
+                    <div class="kpi-value kpi-value--sm" id="reportFuelTotal">—</div>
+                    <span class="kpi-sub" id="reportFuelSub">—</span>
+                  </div>
+                  <div class="kpi-card">
+                    <span class="kpi-label">Manutenção</span>
+                    <div class="kpi-value kpi-value--sm" id="reportMaintTotal">—</div>
+                    <span class="kpi-sub" id="reportMaintSub">—</span>
+                  </div>
+                  <div class="kpi-card kpi-card--highlight">
+                    <span class="kpi-label">Total a reembolsar</span>
+                    <div class="kpi-value" id="reportTotal">—</div>
+                    <span class="kpi-sub" id="reportTotalSub">—</span>
+                  </div>
+                </div>
+
+                <p class="report-warning" id="reportWarning" role="status" hidden></p>
+
+                <p class="report-none" id="reportNone" hidden>
+                  Nenhum gasto neste período.
+                </p>
+                <table class="report-table" id="reportTable">
+                  <caption class="visually-hidden">Lançamentos do período</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Data</th>
+                      <th scope="col">Tipo</th>
+                      <th scope="col">Descrição</th>
+                      <th scope="col" class="num">KM</th>
+                      <th scope="col" class="num">Litros</th>
+                      <th scope="col" class="num">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reportRows"></tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row" colspan="5">Total a reembolsar</th>
+                      <td class="num" id="reportFootTotal">—</td>
+                    </tr>
+                  </tfoot>
+                </table>
+                <p class="report-doc__generated" id="reportGenerated"></p>
+              </article>
+            </div>
+          </section>
         </div>
       </div>
     </main>
@@ -766,6 +934,20 @@
           />
         </svg>
         <span>Manutenção</span>
+      </button>
+      <button class="bnav-item" data-screen="report">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+          <path d="M14 2v6h6M8 13h8M8 17h5" />
+        </svg>
+        <span>Relatório</span>
       </button>
     </nav>
 

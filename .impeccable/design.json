@@ -1,0 +1,490 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-24T02:46:36+00:00",
+  "title": "Design System: AutoGest",
+  "extensions": {
+    "colorMeta": {
+      "ink-blue": {
+        "role": "primary",
+        "displayName": "Caneta Azul",
+        "canonical": "#3b82f6",
+        "tonalRamp": [
+          "#12213a",
+          "#173668",
+          "#16499c",
+          "#105bd5",
+          "#3c7fec",
+          "#7da6e8",
+          "#b7cbeb",
+          "#edf1f8"
+        ]
+      },
+      "ink-blue-text": {
+        "role": "primary",
+        "displayName": "Caneta Azul Clara",
+        "canonical": "#60a5fa",
+        "tonalRamp": [
+          "#11243b",
+          "#163b6a",
+          "#15529e",
+          "#0d68d8",
+          "#398aef",
+          "#7cade9",
+          "#b7ceec",
+          "#edf2f8"
+        ]
+      },
+      "ink-blue-button": {
+        "role": "primary",
+        "displayName": "Caneta Azul Funda",
+        "canonical": "#2563eb",
+        "tonalRamp": [
+          "#141f39",
+          "#1b3265",
+          "#1c4296",
+          "#1951cc",
+          "#4376e4",
+          "#82a0e3",
+          "#bac8e9",
+          "#edf0f7"
+        ]
+      },
+      "ink-blue-button-hover": {
+        "role": "primary",
+        "displayName": "Caneta Azul Funda (hover)",
+        "canonical": "#1d4ed8",
+        "tonalRamp": [
+          "#151e37",
+          "#1e3062",
+          "#213f91",
+          "#204cc5",
+          "#4a71de",
+          "#869ddf",
+          "#bcc7e7",
+          "#eef0f7"
+        ]
+      },
+      "checked-green": {
+        "role": "secondary",
+        "displayName": "Verde Conferido",
+        "canonical": "#10b981",
+        "tonalRamp": [
+          "#14392d",
+          "#1a654c",
+          "#1c976e",
+          "#18cd91",
+          "#42e5af",
+          "#82e3c3",
+          "#b9e9d9",
+          "#edf7f4"
+        ]
+      },
+      "reminder-amber": {
+        "role": "secondary",
+        "displayName": "Âmbar Lembrete",
+        "canonical": "#f59e0b",
+        "tonalRamp": [
+          "#3b2b12",
+          "#694a17",
+          "#9d6b16",
+          "#d68c0f",
+          "#edab3b",
+          "#e8c07d",
+          "#ebd8b7",
+          "#f8f4ed"
+        ]
+      },
+      "overdue-red": {
+        "role": "secondary",
+        "displayName": "Vermelho Vencido",
+        "canonical": "#ef4444",
+        "tonalRamp": [
+          "#391414",
+          "#651a1a",
+          "#971c1c",
+          "#ce1818",
+          "#e54242",
+          "#e38282",
+          "#e9b9b9",
+          "#f7eded"
+        ]
+      },
+      "overdue-red-text": {
+        "role": "secondary",
+        "displayName": "Vermelho Vencido Claro",
+        "canonical": "#f87171",
+        "tonalRamp": [
+          "#3a1212",
+          "#681717",
+          "#9c1717",
+          "#d41111",
+          "#ec3c3c",
+          "#e77e7e",
+          "#ebb7b7",
+          "#f8eded"
+        ]
+      },
+      "overdue-red-button": {
+        "role": "secondary",
+        "displayName": "Vermelho Vencido Fundo",
+        "canonical": "#dc2626",
+        "tonalRamp": [
+          "#361616",
+          "#602020",
+          "#8e2424",
+          "#c12525",
+          "#da4e4e",
+          "#dc8989",
+          "#e6bdbd",
+          "#f6eeee"
+        ]
+      },
+      "overdue-red-button-hover": {
+        "role": "secondary",
+        "displayName": "Vermelho Vencido Fundo (hover)",
+        "canonical": "#b91c1c",
+        "tonalRamp": [
+          "#371616",
+          "#611f1f",
+          "#8f2323",
+          "#c22323",
+          "#db4d4d",
+          "#dd8888",
+          "#e6bcbc",
+          "#f7eeee"
+        ]
+      },
+      "night-cover": {
+        "role": "neutral",
+        "displayName": "Capa Noturna",
+        "canonical": "#0a1520",
+        "tonalRamp": [
+          "#1b2632",
+          "#284057",
+          "#335980",
+          "#3a73ab",
+          "#6194c7",
+          "#94b2d1",
+          "#c2d1e0",
+          "#eff2f5"
+        ]
+      },
+      "night-spine": {
+        "role": "neutral",
+        "displayName": "Lombada Azul-Noite",
+        "canonical": "#0f1e2e",
+        "tonalRamp": [
+          "#1b2632",
+          "#293f56",
+          "#34587e",
+          "#3c71aa",
+          "#6392c5",
+          "#95b2d0",
+          "#c3d1df",
+          "#eff2f5"
+        ]
+      },
+      "dark-page": {
+        "role": "neutral",
+        "displayName": "Folha Escura",
+        "canonical": "#162436",
+        "tonalRamp": [
+          "#1d2530",
+          "#2d3d53",
+          "#3a5578",
+          "#456da0",
+          "#6b8fbd",
+          "#9aafcb",
+          "#c5d0dd",
+          "#f0f2f5"
+        ]
+      },
+      "raised-page": {
+        "role": "neutral",
+        "displayName": "Folha Elevada",
+        "canonical": "#1d2f42",
+        "tonalRamp": [
+          "#1e262f",
+          "#2e3f51",
+          "#3d5876",
+          "#49729d",
+          "#6e93ba",
+          "#9cb2c9",
+          "#c6d1dc",
+          "#f0f2f5"
+        ]
+      },
+      "hover-page": {
+        "role": "neutral",
+        "displayName": "Folha Realçada",
+        "canonical": "#243650",
+        "tonalRamp": [
+          "#1e252f",
+          "#2f3d51",
+          "#3d5475",
+          "#4a6b9c",
+          "#6f8db9",
+          "#9caec9",
+          "#c6cfdc",
+          "#f0f2f4"
+        ]
+      },
+      "margin-line": {
+        "role": "neutral",
+        "displayName": "Linha de Margem",
+        "canonical": "#1e3048",
+        "tonalRamp": [
+          "#1d252f",
+          "#2d3d52",
+          "#3b5577",
+          "#466c9f",
+          "#6c8ebc",
+          "#9bafca",
+          "#c5cfdd",
+          "#f0f2f5"
+        ]
+      },
+      "light-ink": {
+        "role": "neutral",
+        "displayName": "Tinta Clara",
+        "canonical": "#e2e8f0",
+        "tonalRamp": [
+          "#1f252d",
+          "#323e4e",
+          "#425671",
+          "#506e95",
+          "#758fb3",
+          "#a0b0c5",
+          "#c8d0da",
+          "#f0f2f4"
+        ]
+      },
+      "soft-graphite": {
+        "role": "neutral",
+        "displayName": "Grafite Suave",
+        "canonical": "#94a3b8",
+        "tonalRamp": [
+          "#22262b",
+          "#373e49",
+          "#4a5768",
+          "#5d6f89",
+          "#8091a7",
+          "#a7b1be",
+          "#cbd0d7",
+          "#f1f2f3"
+        ]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Grafite",
+        "canonical": "#8196b3",
+        "tonalRamp": [
+          "#21252c",
+          "#353e4b",
+          "#47566b",
+          "#586e8d",
+          "#7c90ac",
+          "#a4b0c1",
+          "#cad0d8",
+          "#f1f2f4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Título da tela na barra superior (h1)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Títulos de seção e de gráfico (h2)."
+      },
+      "metric": {
+        "displayName": "Metric",
+        "purpose": "Número principal dos indicadores."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texto, campos e botões."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Rótulos de indicador em caixa alta."
+      }
+    },
+    "shadows": [
+      {
+        "name": "folha",
+        "value": "0 2px 12px rgba(0, 0, 0, 0.35)",
+        "purpose": "Cartões em repouso."
+      },
+      {
+        "name": "flutuante",
+        "value": "0 8px 32px rgba(0, 0, 0, 0.5)",
+        "purpose": "Toasts, modal, indicador de atualizar."
+      },
+      {
+        "name": "foco",
+        "value": "0 0 0 3px rgba(59, 130, 246, 0.15)",
+        "purpose": "Campo focado."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Menu lateral e seta do puxar-para-atualizar."
+      },
+      {
+        "name": "ease-snap",
+        "value": "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+        "purpose": "Retorno do conteúdo ao soltar o puxar-para-atualizar."
+      },
+      {
+        "name": "duration-state",
+        "value": "0.15s",
+        "purpose": "Hover e mudança de cor."
+      },
+      {
+        "name": "duration-enter",
+        "value": "0.2s",
+        "purpose": "Entrada de tela (fade + 6px) e de modal; só fade em reduzir movimento."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile",
+        "value": "max-width: 768px"
+      },
+      {
+        "name": "tablet",
+        "value": "769px – 1024px"
+      },
+      {
+        "name": "wide",
+        "value": "min-width: 1100px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal do formulário (Registrar, Salvar veículo).",
+      "html": "<button class=\"ds-btn-primary\">Registrar</button>",
+      "css": ".ds-btn-primary{background:var(--btn-primary,#2563eb);color:#fff;font:600 0.875rem/1 Inter,system-ui,sans-serif;padding:0.6rem 1.2rem;border:0;border-radius:6px;cursor:pointer;transition:background .15s,transform .1s}.ds-btn-primary:hover{background:var(--btn-primary-hover,#1d4ed8)}.ds-btn-primary:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}.ds-btn-primary:active{transform:scale(.97)}"
+    },
+    {
+      "name": "Botão secundário (ghost)",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Ações secundárias: Limpar, Ler recibo, + Nova.",
+      "html": "<button class=\"ds-btn-ghost\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z\"/><circle cx=\"12\" cy=\"13\" r=\"3.5\"/></svg>Ler recibo</button>",
+      "css": ".ds-btn-ghost{display:inline-flex;align-items:center;gap:6px;background:#1d2f42;color:#94a3b8;border:1px solid #1e3048;font:600 0.875rem/1 Inter,system-ui,sans-serif;padding:0.6rem 1.2rem;border-radius:6px;cursor:pointer;transition:background .15s,color .15s}.ds-btn-ghost:hover{background:#243650;color:#e2e8f0}.ds-btn-ghost:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}"
+    },
+    {
+      "name": "Campo com rótulo e erro",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de formulário com rótulo visível; estado de erro com mensagem abaixo.",
+      "html": "<div class=\"ds-field\"><label for=\"ds-km\">KM atual</label><input id=\"ds-km\" placeholder=\"48500\" aria-invalid=\"true\" aria-describedby=\"ds-km-err\"><p id=\"ds-km-err\" class=\"ds-field-error\">Informe a KM do painel.</p></div>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:6px;font-family:Inter,system-ui,sans-serif;max-width:280px}.ds-field label{font-size:.75rem;font-weight:500;color:#94a3b8;letter-spacing:.02em}.ds-field input{background:#0a1520;color:#e2e8f0;border:1px solid #1e3048;border-radius:6px;padding:.6rem .85rem;font-size:.875rem;outline:none;transition:border-color .2s,box-shadow .2s}.ds-field input::placeholder{color:#8196b3}.ds-field input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}.ds-field input[aria-invalid=true]{border-color:#f87171}.ds-field-error{font-size:.75rem;color:#f87171;margin:0}"
+    },
+    {
+      "name": "Cartão de indicador",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "KPI: rótulo em caixa alta, número grande, apoio em grafite.",
+      "html": "<div class=\"ds-kpi\"><span class=\"ds-kpi-label\">Consumo médio</span><div class=\"ds-kpi-value\">14,13 <span>km/l</span></div><span class=\"ds-kpi-sub\">8 abastecimentos registrados</span></div>",
+      "css": ".ds-kpi{display:flex;flex-direction:column;gap:4px;background:linear-gradient(135deg,#162d4d 0%,#0e1e30 100%);border:1px solid rgba(59,130,246,.3);border-top:3px solid #3b82f6;border-radius:10px;padding:16px 18px;box-shadow:0 2px 12px rgba(0,0,0,.35);font-family:Inter,system-ui,sans-serif;max-width:300px}.ds-kpi-label{font-size:.7rem;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:#8196b3}.ds-kpi-value{font-size:2rem;font-weight:700;line-height:1.1;letter-spacing:-.03em;color:#e2e8f0}.ds-kpi-value span{font-size:1rem;font-weight:400;color:#94a3b8}.ds-kpi-sub{font-size:.75rem;color:#94a3b8}"
+    },
+    {
+      "name": "Selo",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Rótulo de gráfico ou etiqueta de combustível.",
+      "html": "<span class=\"ds-badge\">6 meses até ago/25</span>",
+      "css": ".ds-badge{display:inline-block;font:600 .6875rem/1.4 Inter,system-ui,sans-serif;background:rgba(59,130,246,.14);color:#60a5fa;border-radius:20px;padding:2px 8px;text-transform:uppercase;letter-spacing:.05em}"
+    },
+    {
+      "name": "Item de menu",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Navegação lateral; ativo em caneta azul.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\" href=\"#\">Dashboard</a><a class=\"ds-nav-item\" href=\"#\">Garagem</a></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;background:#0f1e2e;padding:8px;width:200px;font-family:Inter,system-ui,sans-serif}.ds-nav-item{padding:10px 12px;border-radius:6px;font-size:.875rem;font-weight:500;color:#94a3b8;text-decoration:none;transition:background .15s,color .15s}.ds-nav-item:hover{background:#162436;color:#e2e8f0}.ds-nav-item.is-active{background:rgba(59,130,246,.14);color:#60a5fa}.ds-nav-item:focus-visible{outline:2px solid #3b82f6;outline-offset:2px}"
+    },
+    {
+      "name": "Cartão de manutenção",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Assinatura: carimbo de status com faixa, data, KM e previsão.",
+      "html": "<div class=\"ds-maint\"><div class=\"ds-maint-type\">Troca de óleo</div><div class=\"ds-maint-meta\">28/11/2026 · 73.000 km · faltam 500 km (≈ 26 dias)</div><div class=\"ds-maint-status\">Vence em 5d</div></div>",
+      "css": ".ds-maint{position:relative;background:#1d2f42;border:1px solid rgba(239,68,68,.4);border-radius:10px;padding:14px 16px 14px 18px;font-family:Inter,system-ui,sans-serif;max-width:320px;overflow:hidden}.ds-maint::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:#ef4444}.ds-maint-type{font-size:.85rem;font-weight:600;color:#e2e8f0}.ds-maint-meta{font-size:.75rem;color:#8196b3;margin-top:4px}.ds-maint-status{font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#f87171;margin-top:6px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "O Caderno do Motorista",
+    "overview": "O AutoGest é o caderninho de bordo que a pessoa sempre quis manter e nunca manteve: cada abastecimento, cada troca de óleo, cada real gasto, anotados com a mesma letra e na mesma ordem. O visual serve a esse registro. As páginas são folhas escuras sobre uma capa azul-noite, os valores ficam alinhados e legíveis, e a cor aparece como as marcações de um caderno bem cuidado: a caneta azul para o que se pode fazer e os carimbos de status para o que precisa de atenção.\n\nA densidade é de caderno, não de painel de controle. O histórico, as datas e os valores são o conteúdo; a interface recua. Componentes são precisos e discretos, com contornos finos, cantos suavemente arredondados e sombra leve, para que nada dispute atenção com os números e com os alertas de manutenção.\n\nÉ sempre escuro (decisão do usuário, ver PRODUCT.md), pensado para ser lido rápido no celular dentro do carro e com calma no computador.",
+    "keyCharacteristics": [
+      "Folhas escuras em camadas tonais (capa → página → página elevada), com sombra suave só nos cartões.",
+      "Um único acento de ação, a caneta azul; verde, âmbar e vermelho são reservados para estado.",
+      "Números grandes e firmes; rótulos pequenos em caixa alta, espaçados.",
+      "Ícones desenhados em traço fino (SVG, 2px), nunca emoji. A exceção é o avatar do veículo.",
+      "Contraste AA em todo texto, inclusive no sol do posto."
+    ],
+    "rules": [
+      {
+        "name": "The Caneta Azul Rule",
+        "body": "Azul é o único acento de ação. Se algo azul não é clicável nem informativo, deve ser outra cor.",
+        "section": "colors"
+      },
+      {
+        "name": "The Carimbo Rule",
+        "body": "Verde, âmbar e vermelho só marcam estado (consumo, prazo de manutenção, erro). Nunca são decoração, e cada um sempre vem acompanhado de texto (\"Vencida\", \"Em 20 dias\"), nunca só a cor.",
+        "section": "colors"
+      },
+      {
+        "name": "The Duas Canetas Rule",
+        "body": "Cor de acento como texto usa a versão clara (`*-text`); como fundo de botão, a versão funda (`btn-*`). O tom médio (#3b82f6, #ef4444) não leva texto em cima.",
+        "section": "colors"
+      },
+      {
+        "name": "The Piso de 11px Rule",
+        "body": "Nenhum texto funcional (rótulo, selo, status, menu) fica abaixo de 11px (0.6875rem).",
+        "section": "typography"
+      },
+      {
+        "name": "The Número Primeiro Rule",
+        "body": "Num indicador, o valor é sempre o maior elemento; a unidade (km/l, L, R$) vem menor e em Grafite Suave.",
+        "section": "typography"
+      },
+      {
+        "name": "The Formato Brasileiro Rule",
+        "body": "Números com vírgula decimal e ponto de milhar (14,13 km/l; 72.000 km; R$ 6,09), sempre.",
+        "section": "typography"
+      },
+      {
+        "name": "The Folha Sobre Folha Rule",
+        "body": "Para destacar algo, suba um tom de fundo (Folha Escura → Folha Elevada) antes de pensar em sombra ou cor.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** usar Caneta Azul Clara (#60a5fa) para todo texto azul e Caneta Azul Funda (#2563eb) para todo botão azul com texto branco.",
+      "**Do** acompanhar toda cor de status com a palavra do status (\"Vencida\", \"Em dia\").",
+      "**Do** formatar números em pt-BR (vírgula decimal, ponto de milhar; R$ via `Intl`).",
+      "**Do** usar os ícones do sprite SVG (traço de 2px, cantos arredondados) para qualquer ação nova.",
+      "**Do** manter alvos de toque de pelo menos 44px no celular e texto funcional de pelo menos 11px.",
+      "**Do** mostrar erros de formulário no próprio campo, além do toast."
+    ],
+    "donts": [
+      "**Don't** criar tema claro: o app é sempre escuro (decisão do usuário).",
+      "**Don't** usar emoji como ícone de ação ou de interface; o emoji fica só no avatar do veículo.",
+      "**Don't** colocar texto sobre o tom médio do acento (#3b82f6, #ef4444): falha o contraste AA.",
+      "**Don't** usar verde, âmbar ou vermelho como decoração.",
+      "**Don't** carregar fontes, scripts ou imagens de outros domínios: a CSP só permite o próprio site."
+    ]
+  }
+}

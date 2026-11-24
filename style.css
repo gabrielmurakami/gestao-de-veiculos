@@ -589,6 +589,7 @@ ul {
 .maint-card__type {
   font-size: 0.85rem;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .maint-card__date {
   font-size: 0.75rem;
@@ -887,6 +888,7 @@ ul {
 }
 .fuel-history-item__info {
   flex: 1;
+  min-width: 0; /* deixa o texto quebrar em vez de empurrar o km/l e o botão */
 }
 .fuel-history-item__main {
   font-size: 0.85rem;
@@ -920,6 +922,7 @@ ul {
   border-radius: var(--radius);
   padding: 14px 16px;
   display: flex;
+  flex-wrap: wrap; /* o formulário de conclusão ocupa a linha de baixo */
   align-items: center;
   gap: 12px;
   margin-bottom: 10px;
@@ -935,6 +938,8 @@ ul {
 }
 .maint-list-item__info {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere; /* observações com palavras/links enormes */
 }
 .maint-list-item__type {
   font-size: 0.875rem;
@@ -1468,10 +1473,536 @@ ul {
 }
 
 /* ══════════════════════════════════════════════════
+   UTILITÁRIOS DE FORMULÁRIO
+═══════════════════════════════════════════════════ */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.field-hint,
+.label-optional {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.car-pill--work {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--accent-amber);
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  min-height: 32px;
+}
+.check input {
+  /* desfaz o estilo global de campos (appearance: none, largura 100%) */
+  -webkit-appearance: checkbox;
+  appearance: auto;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--btn-primary);
+  flex-shrink: 0;
+}
+
+/* Controle segmentado (rádios com cara de botões) */
+fieldset.field {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+fieldset.field legend {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+  padding: 0;
+}
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+}
+.segmented label {
+  position: relative;
+  cursor: pointer;
+}
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.segmented span {
+  display: block;
+  padding: 0.45rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.segmented label:hover span {
+  color: var(--text-primary);
+}
+.segmented input:checked + span {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-light);
+}
+.segmented input:focus-visible + span {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
+}
+
+/* ══════════════════════════════════════════════════
+   CONCLUIR MANUTENÇÃO (valor e data)
+═══════════════════════════════════════════════════ */
+.resolve-form {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.resolve-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ══════════════════════════════════════════════════
+   RELATÓRIO
+═══════════════════════════════════════════════════ */
+.report-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.report-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.report-actions[hidden] {
+  display: none;
+}
+.report-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 20px;
+}
+.report-filters__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 24px;
+}
+.report-filters__row > .field:first-child {
+  min-width: 220px;
+}
+.report-custom {
+  display: flex;
+  gap: 12px;
+}
+.report-custom[hidden],
+.report-identity__fields[hidden],
+#reportCarField[hidden] {
+  display: none;
+}
+.report-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.report-identity__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
+}
+
+/* Documento */
+.report-doc__head h3,
+.report-doc__generated {
+  display: none; /* só na impressão: na tela a aba já tem título */
+}
+.report-doc__head p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.report-warning {
+  font-size: 0.8rem;
+  color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: var(--gap);
+}
+.report-none {
+  padding: 32px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.report-table[hidden] {
+  display: none;
+}
+.report-table th,
+.report-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.report-table thead th {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  background: var(--bg-base);
+}
+.report-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.report-table td:nth-child(3) {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.report-table tfoot th,
+.report-table tfoot td {
+  font-weight: 700;
+  font-size: 0.95rem;
+  border-bottom: 0;
+  background: var(--bg-raised);
+}
+.report-table tfoot th {
+  text-align: right;
+}
+.report-missing {
+  color: var(--accent-amber);
+  font-size: 0.75rem;
+}
+
+@media screen and (max-width: 768px) {
+  .report-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .report-summary .kpi-card--highlight {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+  .resolve-form {
+    grid-template-columns: 1fr 1fr;
+  }
+  .resolve-form__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+  .report-custom {
+    width: 100%;
+  }
+  .report-custom .field {
+    flex: 1;
+    min-width: 0; /* campo de data não estoura o cartão */
+  }
+  .report-custom input {
+    min-width: 0;
+  }
+  .report-period,
+  .report-period .segmented {
+    width: 100%;
+  }
+  .report-period .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .report-period .segmented span {
+    padding: 0.55rem 0.25rem;
+    text-align: center;
+  }
+  /* Tabela vira lista de cartões no celular */
+  .report-table,
+  .report-table tbody,
+  .report-table tr,
+  .report-table td {
+    display: block;
+    width: 100%;
+  }
+  .report-table {
+    background: none;
+    border: 0;
+  }
+  .report-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .report-table tbody tr {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 8px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 12px;
+  }
+  .report-table td {
+    padding: 0;
+    border: 0;
+  }
+  .report-table td[data-label="Data"] {
+    font-weight: 600;
+  }
+  .report-table td[data-label="Tipo"] {
+    text-align: right;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+  .report-table td[data-label="Descrição"] {
+    grid-column: 1 / -1;
+  }
+  .report-table td[data-label="KM"],
+  .report-table td[data-label="Litros"] {
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .report-table td[data-label="KM"]::before {
+    content: "KM ";
+  }
+  .report-table td[data-label="Valor"] {
+    grid-column: 2;
+    grid-row: 3 / span 2;
+    align-self: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+  .report-table tfoot {
+    display: block;
+  }
+  .report-table tfoot tr {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: var(--radius);
+  }
+  .report-table tfoot th,
+  .report-table tfoot td {
+    display: block;
+    width: auto;
+    padding: 0;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   IMPRESSÃO / PDF DO RELATÓRIO — papel claro
+   (a tela continua sempre escura; o documento é para papel)
+═══════════════════════════════════════════════════ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+  :root {
+    color-scheme: light;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+    overflow: visible !important;
+    height: auto !important;
+    display: block !important;
+  }
+  .sidebar,
+  .topbar,
+  .bottom-nav,
+  .toast-container,
+  .modal-overlay,
+  .ptr-indicator,
+  .report-header,
+  .report-filters,
+  #reportEmpty {
+    display: none !important;
+  }
+  .main-content,
+  .ptr-wrapper,
+  .ptr-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+  .screen {
+    display: none !important;
+  }
+  #screen-report {
+    display: block !important;
+    padding: 0 !important;
+    animation: none !important;
+  }
+  .report-doc,
+  .report-doc * {
+    color: #111 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-color: #c8ccd2 !important;
+  }
+  .report-doc__head h3 {
+    display: block;
+    font-size: 16pt;
+    margin-bottom: 4pt;
+  }
+  .report-doc__head p {
+    font-size: 10pt;
+    color: #333 !important;
+    margin-bottom: 2pt;
+  }
+  .report-doc__head {
+    margin-bottom: 12pt;
+    padding-bottom: 8pt;
+    border-bottom: 2px solid #111 !important;
+  }
+  .report-summary {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8pt;
+    margin-bottom: 10pt;
+  }
+  .report-summary .kpi-card {
+    border: 1px solid #c8ccd2;
+    padding: 6pt 8pt;
+    break-inside: avoid;
+  }
+  .report-summary .kpi-card--highlight::before {
+    display: none;
+  }
+  .report-summary .kpi-value {
+    font-size: 14pt !important;
+  }
+  .report-warning {
+    border: 1px solid #999 !important;
+    font-size: 9pt;
+  }
+  /* Tabela de verdade também no papel (desfaz os cartões do celular) */
+  .report-table {
+    display: table !important;
+    width: 100%;
+    border: 0;
+    font-size: 9.5pt;
+  }
+  .report-table thead {
+    display: table-header-group !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    clip: auto !important;
+  }
+  .report-table tbody {
+    display: table-row-group !important;
+  }
+  .report-table tfoot {
+    display: table-footer-group !important;
+  }
+  .report-table tr {
+    display: table-row !important;
+    break-inside: avoid;
+  }
+  .report-table th,
+  .report-table td {
+    display: table-cell !important;
+    padding: 4pt 6pt !important;
+    border-bottom: 1px solid #c8ccd2 !important;
+  }
+  .report-table td::before {
+    content: none !important;
+  }
+  .report-table thead th {
+    font-size: 8pt;
+    border-bottom: 1.5px solid #111 !important;
+  }
+  .report-table tfoot th,
+  .report-table tfoot td {
+    font-size: 11pt;
+    border-top: 1.5px solid #111 !important;
+    border-bottom: 0 !important;
+  }
+  .report-doc__generated {
+    display: block;
+    margin-top: 10pt;
+    font-size: 8pt;
+    color: #555 !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   ERRO NO CAMPO (validação)
+═══════════════════════════════════════════════════ */
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--accent-red-text);
+}
+input[aria-invalid="true"]:focus,
+select[aria-invalid="true"]:focus,
+textarea[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.18);
+}
+.field-error {
+  font-size: 0.75rem;
+  color: var(--accent-red-text);
+  line-height: 1.4;
+}
+
+/* ══════════════════════════════════════════════════
    LER RECIBO (OCR)
 ═══════════════════════════════════════════════════ */
 .btn:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn--loading {
   cursor: progress;
 }
 .btn--loading .i {

@@ -180,6 +180,66 @@ function showToast(msg, type = "success", duration = 3000, action = null) {
   setTimeout(close, duration);
 }
 
+/* ═══════════════════════════════
+   VALIDAÇÃO DE FORMULÁRIO (erro no próprio campo)
+   Cada erro marca o campo (aria-invalid + borda), mostra a mensagem logo
+   abaixo (aria-describedby) e o foco vai para o primeiro campo com problema.
+   A marcação some assim que a pessoa altera o campo.
+═══════════════════════════════ */
+function clearFieldError(input) {
+  input.removeAttribute("aria-invalid");
+  const msg = document.getElementById(`${input.id}-error`);
+  if (msg) msg.remove();
+  const described = (input.getAttribute("aria-describedby") || "")
+    .split(" ")
+    .filter((id) => id && id !== `${input.id}-error`)
+    .join(" ");
+  if (described) input.setAttribute("aria-describedby", described);
+  else input.removeAttribute("aria-describedby");
+}
+
+function setFieldError(input, message) {
+  clearFieldError(input);
+  input.setAttribute("aria-invalid", "true");
+  const msg = document.createElement("p");
+  msg.className = "field-error";
+  msg.id = `${input.id}-error`;
+  msg.textContent = message;
+  (input.closest(".field") || input.parentElement).appendChild(msg);
+  const described = input.getAttribute("aria-describedby");
+  input.setAttribute("aria-describedby", described ? `${described} ${msg.id}` : msg.id);
+  const clear = () => clearFieldError(input);
+  input.addEventListener("input", clear, { once: true });
+  input.addEventListener("change", clear, { once: true });
+}
+
+/**
+ * Valida uma lista de regras { id, test, message } na ordem do formulário.
+ * Retorna true se tudo passou; senão marca os campos e foca o primeiro erro.
+ */
+function validateFields(rules) {
+  rules.forEach((r) => clearFieldError(document.getElementById(r.id)));
+  const failed = rules.filter((r) => !r.test());
+  // Um erro por campo (a primeira regra que falhou para ele)
+  const seen = new Set();
+  failed.forEach((r) => {
+    if (seen.has(r.id)) return;
+    seen.add(r.id);
+    setFieldError(document.getElementById(r.id), r.message);
+  });
+  if (failed.length === 0) return true;
+  document.getElementById(failed[0].id).focus();
+  showToast(
+    seen.size === 1 ? "Confira o campo destacado." : `Confira os ${seen.size} campos destacados.`,
+    "error",
+  );
+  return false;
+}
+
+function clearFormErrors(root) {
+  root.querySelectorAll('[aria-invalid="true"]').forEach(clearFieldError);
+}
+
 // Exclusão com "Desfazer": `restore` recoloca os dados como estavam
 function showUndoToast(msg, restore) {
   showToast(msg, "info", 6000, {
@@ -250,6 +310,7 @@ const SCREEN_TITLES = {
   garage: "Garagem",
   fuel: "Abastecimento",
   maintenance: "Manutenções",
+  report: "Relatório",
 };
 
 // Estado de renderização por tela (evita re-render desnecessário)
@@ -258,6 +319,7 @@ const renderState = {
   garage: { dirty: true, rendered: false },
   fuel: { dirty: true, rendered: false },
   maintenance: { dirty: true, rendered: false },
+  report: { dirty: true, rendered: false },
 };
 
 // null até o primeiro navigateTo() — garante que a tela inicial seja renderizada
@@ -270,17 +332,17 @@ function markDirty(screenId) {
 
 // Invalida todas as telas que dependem de um carro
 function invalidateCarScreens() {
-  ["dashboard", "fuel", "maintenance"].forEach((s) => markDirty(s));
+  ["dashboard", "fuel", "maintenance", "report"].forEach((s) => markDirty(s));
 }
 
 // Invalida telas que dependem de abastecimentos (dashboard + fuel)
 function invalidateFuelScreens() {
-  ["dashboard", "fuel"].forEach((s) => markDirty(s));
+  ["dashboard", "fuel", "report"].forEach((s) => markDirty(s));
 }
 
 // Invalida telas que dependem de manutenções (dashboard + maintenance)
 function invalidateMaintScreens() {
-  ["dashboard", "maintenance"].forEach((s) => markDirty(s));
+  ["dashboard", "maintenance", "report"].forEach((s) => markDirty(s));
 }
 
 function navigateTo(screenId) {
@@ -318,6 +380,7 @@ function renderCurrentScreen() {
     if (screenId === "fuel") renderFuelScreen();
     if (screenId === "maintenance") renderMaintScreen();
     if (screenId === "garage") renderGarageScreen();
+    if (screenId === "report") Report.render();
     state.dirty = false;
     state.rendered = true;
   }
@@ -901,7 +964,7 @@ function renderGarageScreen() {
       <div class="car-card__info">
         <div class="car-card__name">${esc(car.name)}</div>
         <div class="car-card__sub">
-          ${esc(car.model)} · ${esc(car.year)} · <span class="car-pill">${esc(car.fuel)}</span>
+          ${esc(car.model)} · ${esc(car.year)} · <span class="car-pill">${esc(car.fuel)}</span>${car.usage === "trabalho" ? ` <span class="car-pill car-pill--work">Trabalho</span>` : ""}
           ${avg !== null ? `· <strong class="car-card__kml">${fmt(avg)} km/l</strong>` : ""}
         </div>
       </div>
@@ -941,6 +1004,8 @@ function resetCarForm() {
     document.getElementById(id).value = "";
   });
   document.getElementById("carFuel").value = "flex";
+  document.getElementById("carUsage").value = "pessoal";
+  clearFormErrors(document.getElementById("carFormCard"));
 }
 
 document.getElementById("btnSaveCar").addEventListener("click", () => {
@@ -949,12 +1014,27 @@ document.getElementById("btnSaveCar").addEventListener("click", () => {
   const year = parseInt(document.getElementById("carYear").value);
   const plate = document.getElementById("carPlate").value.trim().toUpperCase();
   const fuel = document.getElementById("carFuel").value;
-  const odo = parseInt(document.getElementById("carOdo").value) || 0;
+  const usage = document.getElementById("carUsage").value === "trabalho" ? "trabalho" : "pessoal";
+  const odoRaw = document.getElementById("carOdo").value;
+  const odo = parseInt(odoRaw) || 0;
+  const maxYear = new Date().getFullYear() + 1;
 
-  if (!name || !model || !year) {
-    showToast("Preencha nome, modelo e ano.", "error");
-    return;
-  }
+  const ok = validateFields([
+    { id: "carName", test: () => name.length > 0, message: "Dê um nome para o veículo." },
+    { id: "carModel", test: () => model.length > 0, message: "Informe o modelo." },
+    { id: "carYear", test: () => Number.isInteger(year), message: "Informe o ano." },
+    {
+      id: "carYear",
+      test: () => year >= 1900 && year <= maxYear,
+      message: `O ano deve estar entre 1900 e ${maxYear}.`,
+    },
+    {
+      id: "carOdo",
+      test: () => odoRaw === "" || (Number(odoRaw) >= 0 && Number(odoRaw) <= 9999999),
+      message: "A KM deve ser um número positivo.",
+    },
+  ]);
+  if (!ok) return;
 
   const cars = DB.getCars();
 
@@ -968,6 +1048,7 @@ document.getElementById("btnSaveCar").addEventListener("click", () => {
         year,
         plate,
         fuel,
+        usage,
         odometer: odo,
         emoji: carEmoji(fuel),
         updatedAt: Date.now(),
@@ -983,6 +1064,7 @@ document.getElementById("btnSaveCar").addEventListener("click", () => {
       year,
       plate,
       fuel,
+      usage,
       odometer: odo,
       emoji: carEmoji(fuel),
       createdAt: Date.now(),
@@ -994,7 +1076,7 @@ document.getElementById("btnSaveCar").addEventListener("click", () => {
   }
 
   rebuildCarSelector();
-  invalidateCarScreens(); // marca telas dependentes como sujas
+  invalidateCarScreens(); // marca telas dependentes como sujas (inclui Relatório)
   renderGarageScreen();
   hideCarForm();
 });
@@ -1022,6 +1104,7 @@ document.getElementById("carList").addEventListener("click", (e) => {
     document.getElementById("carYear").value = car.year;
     document.getElementById("carPlate").value = car.plate || "";
     document.getElementById("carFuel").value = car.fuel;
+    document.getElementById("carUsage").value = car.usage === "trabalho" ? "trabalho" : "pessoal";
     document.getElementById("carOdo").value = car.odometer || "";
     document.getElementById("carFormTitle").textContent = "Editar veículo";
     document.getElementById("carFormCard").style.display = "block";
@@ -1193,25 +1276,32 @@ document.getElementById("btnSaveFuel").addEventListener("click", () => {
   const price = parseFloat(document.getElementById("fuelPrice").value) || null;
   const station = document.getElementById("fuelStation").value.trim();
 
-  if (!date || !odo || !liters) {
-    showToast("Preencha data, KM e litros.", "error");
-    return;
-  }
-  if (liters <= 0) {
-    showToast("Litros deve ser maior que 0.", "error");
-    return;
-  }
-
-  // Validate odometer vs last
+  // KM tem que avançar em relação ao último abastecimento deste veículo
   const existingFuels = DB.getFuelsForCar(car.id);
   const lastOdo = Math.max(...existingFuels.map((f) => f.odometer), 0);
-  if (odo <= lastOdo && existingFuels.length > 0) {
-    showToast(
-      `KM deve ser maior que o último (${lastOdo.toLocaleString("pt-BR")} km).`,
-      "error",
-    );
-    return;
-  }
+  const priceRaw = document.getElementById("fuelPrice").value;
+
+  const ok = validateFields([
+    { id: "fuelDate", test: () => !!date, message: "Informe a data do abastecimento." },
+    { id: "fuelDate", test: () => date <= today(), message: "A data não pode ser no futuro." },
+    { id: "fuelOdo", test: () => Number.isFinite(odo) && odo > 0, message: "Informe a KM do painel." },
+    {
+      id: "fuelOdo",
+      test: () => existingFuels.length === 0 || odo > lastOdo,
+      message: `A KM precisa ser maior que a do último abastecimento (${lastOdo.toLocaleString("pt-BR")} km).`,
+    },
+    {
+      id: "fuelLiters",
+      test: () => Number.isFinite(liters) && liters > 0,
+      message: "Informe quantos litros foram abastecidos.",
+    },
+    {
+      id: "fuelPrice",
+      test: () => priceRaw === "" || Number(priceRaw) > 0,
+      message: "O preço por litro deve ser maior que zero (ou deixe em branco).",
+    },
+  ]);
+  if (!ok) return;
 
   const fuels = DB.getFuels();
   fuels.push({
@@ -1246,6 +1336,7 @@ document.getElementById("btnClearFuel").addEventListener("click", () => {
       const el = document.getElementById(id);
       el.value = "";
       el.classList.remove("field--autofilled"); // destaque do "Ler recibo"
+      clearFieldError(el);
     },
   );
   document.getElementById("fuelDate").value = today();
@@ -1305,7 +1396,8 @@ function renderMaintScreen() {
 
     if (m.resolved) {
       stripeColor = "var(--text-muted)";
-      statusLabel = "Concluída";
+      statusLabel = m.doneDate ? `Concluída em ${fmtDate(m.doneDate)}` : "Concluída";
+      statusLabel += m.cost !== null && m.cost !== undefined ? ` · ${fmtMoney(m.cost)}` : " · valor não informado";
     } else if (m.date < todayStr) {
       stripeColor = "var(--accent-red)";
       statusLabel = "Vencida";
@@ -1336,7 +1428,11 @@ function renderMaintScreen() {
         </div>
       </div>
       <div class="maint-list-item__actions">
-        ${!m.resolved ? `<button class="btn btn--ghost btn--sm" data-action="resolve" data-id="${esc(m.id)}" title="Marcar como feita" aria-label="Marcar como feita">${icon("check")}</button>` : ""}
+        ${
+          !m.resolved
+            ? `<button class="btn btn--ghost btn--sm" data-action="resolve" data-id="${esc(m.id)}" title="Marcar como feita" aria-label="Marcar como feita">${icon("check")}</button>`
+            : `<button class="icon-btn" data-action="resolve" data-id="${esc(m.id)}" title="Editar valor e data" aria-label="Editar valor e data da manutenção">${icon("edit")}</button>`
+        }
         <button class="icon-btn icon-btn--danger" data-action="deletemaint" data-id="${esc(m.id)}" title="Excluir" aria-label="Excluir">${icon("trash")}</button>
       </div>
     `;
@@ -1367,11 +1463,12 @@ document
   .addEventListener("click", hideMaintForm);
 function hideMaintForm() {
   document.getElementById("maintFormCard").style.display = "none";
-  ["maintDate", "maintKm", "maintNotes"].forEach(
+  ["maintDate", "maintKm", "maintNotes", "maintCustom"].forEach(
     (id) => (document.getElementById(id).value = ""),
   );
   document.getElementById("maintType").value = "Troca de óleo";
   document.getElementById("maintCustomWrap").style.display = "none";
+  clearFormErrors(document.getElementById("maintFormCard"));
 }
 
 // Custom type field
@@ -1392,17 +1489,22 @@ document.getElementById("btnSaveMaint").addEventListener("click", () => {
   const km = document.getElementById("maintKm").value;
   const notes = document.getElementById("maintNotes").value.trim();
 
-  if (type === "Outro") {
-    type = document.getElementById("maintCustom").value.trim();
-    if (!type) {
-      showToast("Informe a descrição.", "error");
-      return;
-    }
+  const isCustom = type === "Outro";
+  if (isCustom) type = document.getElementById("maintCustom").value.trim();
+
+  const rules = [];
+  if (isCustom) {
+    rules.push({ id: "maintCustom", test: () => type.length > 0, message: "Descreva a manutenção." });
   }
-  if (!date) {
-    showToast("Informe a data prevista.", "error");
-    return;
-  }
+  rules.push(
+    { id: "maintDate", test: () => !!date, message: "Informe a data prevista." },
+    {
+      id: "maintKm",
+      test: () => km === "" || (Number(km) > 0 && Number(km) <= 9999999),
+      message: "A KM prevista deve ser um número positivo (ou deixe em branco).",
+    },
+  );
+  if (!validateFields(rules)) return;
 
   const maints = DB.getMaints();
   maints.push({
@@ -1423,21 +1525,90 @@ document.getElementById("btnSaveMaint").addEventListener("click", () => {
   renderMaintScreen();
 });
 
+/* Concluir manutenção: valor e data de realização entram no Relatório.
+   O formulário abre dentro do próprio item da lista. */
+function openResolveForm(item, id) {
+  if (!item) return;
+  const m = DB.getMaints().find((x) => x.id === id);
+  if (!m) return;
+  // Só um formulário aberto por vez
+  document.querySelectorAll(".resolve-form").forEach((f) => f.remove());
+  const sid = esc(id);
+  const form = document.createElement("div");
+  form.className = "resolve-form";
+  form.innerHTML = `
+    <div class="field">
+      <label for="resolveCost-${sid}">Valor (R$) <span class="label-optional">(opcional)</span></label>
+      <input type="number" id="resolveCost-${sid}" min="0" step="any" inputmode="decimal"
+        placeholder="0,00" value="${m.cost !== null && m.cost !== undefined ? m.cost : ""}" />
+    </div>
+    <div class="field">
+      <label for="resolveDate-${sid}">Data de realização</label>
+      <input type="date" id="resolveDate-${sid}" value="${esc(m.doneDate || today())}" />
+    </div>
+    <div class="resolve-form__actions">
+      <button type="button" class="btn btn--ghost btn--sm" data-action="resolve-cancel" data-id="${sid}">Cancelar</button>
+      <button type="button" class="btn btn--primary btn--sm" data-action="resolve-save" data-id="${sid}">${m.resolved ? "Salvar" : "Concluir"}</button>
+    </div>`;
+  item.appendChild(form);
+  form.querySelector("input").focus();
+}
+
+function saveResolveForm(id) {
+  const costEl = document.getElementById(`resolveCost-${id}`);
+  const dateEl = document.getElementById(`resolveDate-${id}`);
+  if (!costEl || !dateEl) return;
+  const costRaw = costEl.value;
+  const doneDate = dateEl.value;
+  const ok = validateFields([
+    {
+      id: costEl.id,
+      test: () => costRaw === "" || (Number(costRaw) >= 0 && Number(costRaw) <= 1e6),
+      message: "Informe um valor positivo (ou deixe em branco).",
+    },
+    { id: dateEl.id, test: () => !!doneDate, message: "Informe quando foi feita." },
+    { id: dateEl.id, test: () => doneDate <= today(), message: "A data não pode ser no futuro." },
+  ]);
+  if (!ok) return;
+
+  const maints = DB.getMaints();
+  const idx = maints.findIndex((m) => m.id === id);
+  if (idx === -1) return;
+  const wasResolved = maints[idx].resolved;
+  maints[idx] = {
+    ...maints[idx],
+    resolved: true,
+    doneDate,
+    cost: costRaw === "" ? null : Math.round(Number(costRaw) * 100) / 100,
+  };
+  DB.saveMaints(maints);
+  invalidateMaintScreens(); // dashboard, manutenção e relatório
+  renderMaintScreen();
+  showToast(wasResolved ? "Manutenção atualizada!" : "Manutenção concluída!");
+}
+
 // Maint list actions (delegated)
+// Teclado no formulário de conclusão: Enter salva, Esc cancela
+document.getElementById("maintList").addEventListener("keydown", (e) => {
+  const form = e.target.closest(".resolve-form");
+  if (!form) return;
+  if (e.key === "Enter") {
+    e.preventDefault();
+    form.querySelector('[data-action="resolve-save"]').click();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    renderMaintScreen();
+  }
+});
+
 document.getElementById("maintList").addEventListener("click", (e) => {
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   const { action, id } = btn.dataset;
 
-  if (action === "resolve") {
-    const maints = DB.getMaints();
-    const idx = maints.findIndex((m) => m.id === id);
-    if (idx !== -1) maints[idx].resolved = true;
-    DB.saveMaints(maints);
-    invalidateMaintScreens(); // dashboard + maintenance precisam atualizar
-    renderMaintScreen();
-    showToast("Manutenção marcada como concluída!");
-  }
+  if (action === "resolve") openResolveForm(btn.closest(".maint-list-item"), id);
+  if (action === "resolve-cancel") renderMaintScreen();
+  if (action === "resolve-save") saveResolveForm(id);
 
   if (action === "deletemaint") {
     const before = DB.getMaints();
@@ -2245,6 +2416,343 @@ const ReceiptScanner = (() => {
 })();
 
 /* ═══════════════════════════════
+   RELATÓRIO — PRESTAÇÃO DE CONTAS
+   Reembolso de abastecimentos e manutenções do(s) veículo(s) marcado(s)
+   como Trabalho. Saídas: resumo na tela, impressão/PDF (papel claro, via
+   @media print) e planilha CSV no formato do Excel brasileiro.
+═══════════════════════════════ */
+const MONTH_LONG = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
+
+/** Período de um mês civil: { from, to } em "YYYY-MM-DD" (local). */
+function monthRange(year, monthIndex) {
+  return {
+    from: localISO(new Date(year, monthIndex, 1)),
+    to: localISO(new Date(year, monthIndex + 1, 0)),
+  };
+}
+
+/**
+ * Junta os lançamentos de um veículo num período (datas inclusivas).
+ * Função pura: recebe os dados, não lê o DOM. Testável.
+ */
+function collectReport(car, fuels, maints, from, to) {
+  const inRange = (d) => !!d && d >= from && d <= to;
+  const carFuels = fuels.filter((f) => f.carId === car.id);
+
+  const fuelRows = carFuels
+    .filter((f) => inRange(f.date))
+    .map((f) => ({
+      kind: "fuel",
+      date: f.date,
+      label: "Abastecimento",
+      description: f.station || "",
+      km: f.odometer,
+      liters: f.liters,
+      price: f.price > 0 ? f.price : null,
+      value: f.price > 0 ? Math.round(f.liters * f.price * 100) / 100 : null,
+    }));
+
+  const maintRows = maints
+    .filter((m) => m.carId === car.id && m.resolved && inRange(m.doneDate))
+    .map((m) => ({
+      kind: "maint",
+      date: m.doneDate,
+      label: "Manutenção",
+      description: m.type + (m.notes ? ` — ${m.notes}` : ""),
+      km: m.km ? parseInt(m.km) : null,
+      liters: null,
+      price: null,
+      value: m.cost !== null && m.cost !== undefined ? m.cost : null,
+    }));
+
+  const rows = [...fuelRows, ...maintRows].sort(
+    (a, b) => a.date.localeCompare(b.date) || (a.km || 0) - (b.km || 0),
+  );
+
+  const sum = (list) => list.reduce((s, r) => s + (r.value || 0), 0);
+  const fuelTotal = Math.round(sum(fuelRows) * 100) / 100;
+  const maintTotal = Math.round(sum(maintRows) * 100) / 100;
+
+  // KM rodados no período: do último abastecimento ANTES do período (se houver)
+  // até o último DENTRO dele. Sem anterior, conta a partir do primeiro do período.
+  const byOdo = [...carFuels].sort((a, b) => a.odometer - b.odometer);
+  const inPeriod = byOdo.filter((f) => inRange(f.date));
+  let km = 0;
+  if (inPeriod.length) {
+    const before = byOdo.filter((f) => f.date < from);
+    const start = before.length ? before[before.length - 1].odometer : inPeriod[0].odometer;
+    km = Math.max(0, inPeriod[inPeriod.length - 1].odometer - start);
+  }
+
+  return {
+    rows,
+    fuelTotal,
+    maintTotal,
+    total: Math.round((fuelTotal + maintTotal) * 100) / 100,
+    liters: fuelRows.reduce((s, r) => s + r.liters, 0),
+    km,
+    fuelCount: fuelRows.length,
+    maintCount: maintRows.length,
+    missingFuel: fuelRows.filter((r) => r.value === null).length,
+    missingMaint: maintRows.filter((r) => r.value === null).length,
+  };
+}
+
+/** CSV para Excel pt-BR: separador ";", vírgula decimal, BOM UTF-8. */
+function reportToCsv(data) {
+  const num = (n, dec) =>
+    n === null || n === undefined
+      ? ""
+      : n.toLocaleString("pt-BR", {
+          minimumFractionDigits: dec,
+          maximumFractionDigits: dec,
+          useGrouping: false,
+        });
+  const cell = (v) => {
+    let t = String(v ?? "");
+    // Evita fórmula injetada (=, +, -, @) ao abrir no Excel
+    if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+    return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const lines = [
+    ["Data", "Tipo", "Descrição", "KM", "Litros", "Preço/L (R$)", "Valor (R$)"],
+    ...data.rows.map((r) => [
+      fmtDate(r.date),
+      r.label,
+      r.description,
+      r.km === null ? "" : String(r.km),
+      num(r.liters, 3),
+      num(r.price, 3),
+      r.value === null ? "não informado" : num(r.value, 2),
+    ]),
+    [],
+    ["", "", "Combustível", "", "", "", num(data.fuelTotal, 2)],
+    ["", "", "Manutenção", "", "", "", num(data.maintTotal, 2)],
+    ["", "", "Total a reembolsar", "", "", "", num(data.total, 2)],
+  ];
+  return "﻿" + lines.map((l) => l.map(cell).join(";")).join("\r\n") + "\r\n";
+}
+
+const Report = (() => {
+  const PROFILE_KEY = "ag_report_profile";
+  let current = null; // último cálculo, usado pela exportação
+
+  const $ = (id) => document.getElementById(id);
+
+  function loadProfile() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PROFILE_KEY)) || {};
+      return {
+        include: p.include === true,
+        name: typeof p.name === "string" ? p.name.slice(0, 80) : "",
+        company: typeof p.company === "string" ? p.company.slice(0, 100) : "",
+      };
+    } catch {
+      return { include: false, name: "", company: "" };
+    }
+  }
+  function saveProfile() {
+    try {
+      localStorage.setItem(
+        PROFILE_KEY,
+        JSON.stringify({
+          include: $("reportIncludeId").checked,
+          name: $("reportName").value.trim(),
+          company: $("reportCompany").value.trim(),
+        }),
+      );
+    } catch {
+      /* sem espaço: a identificação só não é lembrada */
+    }
+  }
+
+  const workCars = () => DB.getCars().filter((c) => c.usage === "trabalho");
+
+  function getPeriod() {
+    const mode = document.querySelector('input[name="reportPeriod"]:checked').value;
+    const now = new Date();
+    if (mode === "this") {
+      const r = monthRange(now.getFullYear(), now.getMonth());
+      return { ...r, label: MONTH_LONG.format(now), slug: r.from.slice(0, 7) };
+    }
+    if (mode === "last") {
+      const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const r = monthRange(d.getFullYear(), d.getMonth());
+      return { ...r, label: MONTH_LONG.format(d), slug: r.from.slice(0, 7) };
+    }
+    const from = $("reportFrom").value;
+    const to = $("reportTo").value;
+    return { from, to, label: `${fmtDate(from)} a ${fmtDate(to)}`, slug: `${from}_${to}`, custom: true };
+  }
+
+  function rowHtml(r) {
+    const value = r.value === null ? '<span class="report-missing">não informado</span>' : fmtMoney(r.value);
+    return `<tr class="report-row report-row--${r.kind}">
+      <td data-label="Data">${fmtDate(r.date)}</td>
+      <td data-label="Tipo">${r.label}</td>
+      <td data-label="Descrição">${esc(r.description) || "—"}</td>
+      <td data-label="KM" class="num">${r.km === null ? "—" : r.km.toLocaleString("pt-BR")}</td>
+      <td data-label="Litros" class="num">${r.liters === null ? "—" : fmt(r.liters, 2) + " L"}</td>
+      <td data-label="Valor" class="num">${value}</td>
+    </tr>`;
+  }
+
+  function render() {
+    const cars = workCars();
+    const empty = cars.length === 0;
+    $("reportEmpty").style.display = empty ? "flex" : "none";
+    $("reportContent").hidden = empty;
+    $("reportActions").hidden = empty;
+    if (empty) {
+      current = null;
+      return;
+    }
+
+    // Seletor de veículo: só aparece com mais de um veículo de trabalho
+    const sel = $("reportCar");
+    const prev = sel.value;
+    sel.replaceChildren(
+      ...cars.map((c) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = `${c.emoji} ${c.name}`;
+        return o;
+      }),
+    );
+    sel.value = cars.some((c) => c.id === prev) ? prev : cars[0].id;
+    $("reportCarField").hidden = cars.length < 2;
+    const car = cars.find((c) => c.id === sel.value);
+
+    const period = getPeriod();
+    if (period.custom && (!period.from || !period.to || period.from > period.to)) {
+      validateFields([
+        { id: "reportFrom", test: () => !!period.from, message: "Informe o início." },
+        { id: "reportTo", test: () => !!period.to, message: "Informe o fim." },
+        { id: "reportTo", test: () => period.from <= period.to, message: "O fim deve ser depois do início." },
+      ]);
+      return;
+    }
+
+    const data = collectReport(car, DB.getFuels(), DB.getMaints(), period.from, period.to);
+    current = { car, period, data };
+
+    // Cabeçalho do documento
+    const carLine = [car.name, `${car.model} ${car.year}`, car.plate ? `Placa ${car.plate}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    $("reportDocMeta").textContent = `${carLine} — ${period.label}`;
+    const profile = loadProfile();
+    const idParts = [
+      profile.name && `Solicitante: ${profile.name}`,
+      profile.company && `Empresa: ${profile.company}`,
+    ].filter(Boolean);
+    $("reportDocId").hidden = !(profile.include && idParts.length);
+    $("reportDocId").textContent = idParts.join(" · ");
+
+    // Resumo
+    $("reportFuelTotal").textContent = fmtMoney(data.fuelTotal);
+    $("reportFuelSub").textContent =
+      `${data.fuelCount} abastecimento${data.fuelCount !== 1 ? "s" : ""} · ${fmt(data.liters, 1)} L`;
+    $("reportMaintTotal").textContent = fmtMoney(data.maintTotal);
+    $("reportMaintSub").textContent =
+      `${data.maintCount} manutenç${data.maintCount !== 1 ? "ões" : "ão"} concluída${data.maintCount !== 1 ? "s" : ""}`;
+    $("reportTotal").textContent = fmtMoney(data.total);
+    $("reportTotalSub").textContent = `${data.km.toLocaleString("pt-BR")} km rodados no período`;
+
+    const missing = data.missingFuel + data.missingMaint;
+    $("reportWarning").hidden = missing === 0;
+    if (missing) {
+      const parts = [];
+      if (data.missingFuel) parts.push(`${data.missingFuel} abastecimento${data.missingFuel > 1 ? "s" : ""} sem preço`);
+      if (data.missingMaint) parts.push(`${data.missingMaint} manutenç${data.missingMaint > 1 ? "ões" : "ão"} sem valor`);
+      $("reportWarning").textContent =
+        `${parts.join(" e ")} não entra${missing > 1 ? "m" : ""} no total. Informe o valor para incluir.`;
+    }
+
+    // Lançamentos
+    const none = data.rows.length === 0;
+    $("reportNone").hidden = !none;
+    $("reportTable").hidden = none;
+    $("reportRows").innerHTML = data.rows.map(rowHtml).join("");
+    $("reportFootTotal").textContent = fmtMoney(data.total);
+    $("btnReportCsv").disabled = none;
+    $("btnReportPrint").disabled = none;
+
+    $("reportGenerated").textContent = `Gerado em ${fmtDate(today())} pelo AutoGest.`;
+  }
+
+  function fileSlug() {
+    const name = current.car.name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .toLowerCase();
+    return `prestacao-de-contas_${name || "veiculo"}_${current.period.slug}`;
+  }
+
+  function exportCsv() {
+    if (!current || !current.data.rows.length) return;
+    const blob = new Blob([reportToCsv(current.data)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${fileSlug()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("Planilha baixada!");
+  }
+
+  function print() {
+    if (!current || !current.data.rows.length) return;
+    // O título vira o nome sugerido do PDF no "Salvar como PDF"
+    const prevTitle = document.title;
+    document.title = fileSlug();
+    window.addEventListener("afterprint", () => (document.title = prevTitle), { once: true });
+    window.print();
+  }
+
+  function init() {
+    const profile = loadProfile();
+    $("reportIncludeId").checked = profile.include;
+    $("reportName").value = profile.name;
+    $("reportCompany").value = profile.company;
+    $("reportIdFields").hidden = !profile.include;
+
+    // Datas do "Personalizado" começam no mês atual
+    const now = new Date();
+    const r = monthRange(now.getFullYear(), now.getMonth());
+    $("reportFrom").value = r.from;
+    $("reportTo").value = today();
+
+    document.querySelectorAll('input[name="reportPeriod"]').forEach((radio) =>
+      radio.addEventListener("change", () => {
+        $("reportCustom").hidden = radio.value !== "custom" || !radio.checked;
+        render();
+      }),
+    );
+    ["reportFrom", "reportTo", "reportCar"].forEach((id) => $(id).addEventListener("change", render));
+    $("reportIncludeId").addEventListener("change", () => {
+      $("reportIdFields").hidden = !$("reportIncludeId").checked;
+      saveProfile();
+      render();
+    });
+    ["reportName", "reportCompany"].forEach((id) =>
+      $(id).addEventListener("input", () => {
+        saveProfile();
+        render();
+      }),
+    );
+    $("btnReportCsv").addEventListener("click", exportCsv);
+    $("btnReportPrint").addEventListener("click", print);
+  }
+
+  return { init, render };
+})();
+
+/* ═══════════════════════════════
    BACKUP — EXPORTAR / IMPORTAR
    O arquivo importado é tratado como não confiável: cada registro é
    reconstruído campo a campo (só campos conhecidos, tipos e tamanhos
@@ -2252,7 +2760,8 @@ const ReceiptScanner = (() => {
 ═══════════════════════════════ */
 const Backup = (() => {
   const FORMAT = "autogest-backup";
-  const VERSION = 1;
+  const VERSION = 2; // v2: veículo.usage, manutenção.cost/doneDate
+  const SUPPORTED_VERSIONS = [1, 2];
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
   const MAX_RECORDS = 20000;
   const FUEL_TYPES = ["flex", "gasolina", "etanol", "diesel", "elétrico"];
@@ -2299,6 +2808,7 @@ const Backup = (() => {
       year: num(c.year, { min: 1900, max: 2100, int: true }),
       plate: str(c.plate, 8).toUpperCase(),
       fuel,
+      usage: c.usage === "trabalho" ? "trabalho" : "pessoal",
       odometer: num(c.odometer ?? 0, { max: 1e7, int: true }),
       emoji: carEmoji(fuel), // nunca confia no emoji do arquivo
     };
@@ -2331,6 +2841,8 @@ const Backup = (() => {
       km: num(m.km, { max: 1e7, int: true, optional: true }),
       notes: str(m.notes, 500),
       resolved: m.resolved === true,
+      cost: num(m.cost, { max: 1e6, optional: true }),
+      doneDate: m.doneDate === undefined || m.doneDate === null ? null : date(m.doneDate),
     };
     const createdAt = ts(m.createdAt);
     if (createdAt !== null) maint.createdAt = createdAt;
@@ -2366,7 +2878,7 @@ const Backup = (() => {
     }
     if (!json || json.format !== FORMAT || typeof json.data !== "object" || !json.data)
       throw new Error("o arquivo não é um backup do AutoGest");
-    if (json.version !== VERSION)
+    if (!SUPPORTED_VERSIONS.includes(json.version))
       throw new Error(`versão de backup não suportada (${String(json.version).slice(0, 10)})`);
 
     const d = json.data;
@@ -2499,7 +3011,7 @@ function init() {
   // Handle deep linking from PWA manifest shortcuts (e.g., ?screen=fuel)
   const urlParams = new URLSearchParams(window.location.search);
   const initialScreen = urlParams.get("screen");
-  const validScreens = ["dashboard", "garage", "fuel", "maintenance"];
+  const validScreens = ["dashboard", "garage", "fuel", "maintenance", "report"];
   const startScreen = validScreens.includes(initialScreen)
     ? initialScreen
     : "dashboard";
@@ -2512,6 +3024,7 @@ function init() {
 
   Backup.init();
   ReceiptScanner.init();
+  Report.init();
 
   // Pede ao navegador para não apagar o localStorage quando faltar espaço
   if (navigator.storage && navigator.storage.persist) {

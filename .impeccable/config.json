@@ -20,6 +20,24 @@
         ],
         "createdAt": "2026-11-24T02:23:29.151Z",
         "reason": "Claude verified: the only nested-cards hit is #carSelectorWrap, the bordered vehicle selector inside the topbar header, not a card nested in a card"
+      },
+      {
+        "rule": "hero-eyebrow-chip",
+        "value": "*",
+        "files": [
+          "**/sites-incriveis/modelos/exemplo.html"
+        ],
+        "createdAt": "2026-11-24T02:36:16.747Z",
+        "reason": "Claude verified: third-party skill demo page (sites-incriveis/modelos/exemplo.html), a vendored fixture outside the AutoGest UI; license-restricted, not edited"
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "**/sites-incriveis/modelos/exemplo.html"
+        ],
+        "createdAt": "2026-11-24T02:36:17.561Z",
+        "reason": "Claude verified: third-party skill demo page (sites-incriveis/modelos/exemplo.html), a vendored fixture outside the AutoGest UI; license-restricted, not edited"
       }
     ]
   }
