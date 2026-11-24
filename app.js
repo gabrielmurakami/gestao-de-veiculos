@@ -1209,7 +1209,9 @@ document.getElementById("btnSaveFuel").addEventListener("click", () => {
 document.getElementById("btnClearFuel").addEventListener("click", () => {
   ["fuelDate", "fuelOdo", "fuelLiters", "fuelPrice", "fuelStation"].forEach(
     (id) => {
-      document.getElementById(id).value = "";
+      const el = document.getElementById(id);
+      el.value = "";
+      el.classList.remove("field--autofilled"); // destaque do "Ler recibo"
     },
   );
   document.getElementById("fuelDate").value = today();
@@ -1714,6 +1716,440 @@ const PTR = (() => {
 })();
 
 /* ═══════════════════════════════
+   RECIBO DO POSTO — EXTRAÇÃO DE CAMPOS
+   Função pura: recebe o texto do OCR e devolve
+   { date, liters, price, total, station } (null quando não achar).
+   A parte mais confiável é a validação cruzada litros × preço ≈ total.
+═══════════════════════════════ */
+const RECEIPT_LIMITS = {
+  liters: [1, 200],
+  price: [2, 15],
+  total: [5, 5000],
+};
+
+function inRange(n, [min, max]) {
+  return n >= min && n <= max;
+}
+
+// "40,123" → 40.123 · "1.234,56" → 1234.56 · "6.09" → 6.09
+function parseBrNumber(token) {
+  let t = token.replace(/\s/g, "");
+  if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Corrige confusões típicas do OCR só dentro de tokens que parecem números
+const OCR_DIGIT_FIX = { O: "0", Q: "0", D: "0", I: "1", L: "1", "|": "1", S: "5", B: "8", Z: "2" };
+function fixOcrNumbers(line) {
+  return line.replace(/\b[0-9OQDILSBZ|]{1,4}[.,][0-9OQDILSBZ|]{2,3}\b/g, (tok) =>
+    /\d/.test(tok) ? tok.replace(/[OQDILSBZ|]/g, (c) => OCR_DIGIT_FIX[c]) : tok,
+  );
+}
+
+function normalizeReceiptLine(line) {
+  const upper = line
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[ \t]+/g, " ")
+    .trim();
+  return fixOcrNumbers(upper);
+}
+
+// Todos os números decimais da linha (com 2 ou 3 casas), na ordem
+const DECIMAL_RE = /\d{1,3}(?:\.\d{3})+,\d{2,3}|\d+[.,]\d{2,3}(?!\d)/g;
+function decimalsIn(line) {
+  return (line.match(DECIMAL_RE) || [])
+    .map((tok) => ({ value: parseBrNumber(tok), decimals: tok.split(/[.,]/).pop().length }))
+    .filter((n) => n.value !== null);
+}
+
+function parseReceiptDate(lines, todayIso) {
+  const todayMs = Date.parse(todayIso);
+  const minMs = todayMs - 400 * 864e5;
+  let best = null;
+  const re = /\b(\d{2})[/.-](\d{2})[/.-](\d{4}|\d{2})\b/g;
+  lines.forEach((line) => {
+    for (const m of line.matchAll(re)) {
+      const [, d, mo, yRaw] = m;
+      const y = yRaw.length === 2 ? `20${yRaw}` : yRaw;
+      const iso = `${y}-${mo}-${d}`;
+      const ms = Date.parse(iso);
+      // Date.parse aceita 31/02 → confere se o dia "sobreviveu"
+      if (!Number.isFinite(ms) || new Date(ms).getUTCDate() !== Number(d)) continue;
+      if (ms > todayMs || ms < minMs) continue;
+      if (!best || iso > best) best = iso;
+    }
+  });
+  return best;
+}
+
+const STATION_SKIP_RE =
+  /CNPJ|CPF|\bIE\b|INSC|\bRUA\b|\bR\.|\bAV\b|AVENIDA|ROD\b|RODOVIA|\bTEL|FONE|\bCEP\b|DANFE|NFC|NOTA FISCAL|DOCUMENTO|CUPOM|EXTRATO|\bSAT\b|CONSUMIDOR|\bVIA\b|COMPROVANTE|\d{2}\.\d{3}/;
+const COMPANY_SUFFIX_RE = /\s+(LTDA\.?|EIRELI|ME|EPP|S\/?A|S\.A\.?)\s*$/i;
+
+function toTitleCase(s) {
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s/-])([a-zà-ú])/g, (m, sep, ch) => sep + ch.toUpperCase());
+}
+
+function parseReceiptStation(rawLines, normLines) {
+  const head = normLines.slice(0, 8);
+  // Linha com "POSTO": nomes como "Posto Avenida" ou "Posto Rodovia" são válidos,
+  // então só descarta se for linha de documento (CNPJ etc.)
+  let idx = head.findIndex(
+    (l) => /\bPOSTO\b/.test(l) && !/CNPJ|CPF|\bIE\b|\d{2}\.\d{3}|COMPROVANTE/.test(l),
+  );
+  if (idx === -1) {
+    idx = head.findIndex((l) => {
+      const letters = (l.match(/[A-Z]/g) || []).length;
+      return (
+        letters >= 4 &&
+        letters / l.replace(/\s/g, "").length > 0.6 &&
+        !STATION_SKIP_RE.test(l) &&
+        !/R\$|VALOR|TOTAL|\d[.,]\d/.test(l)
+      );
+    });
+  }
+  if (idx === -1) return null;
+  const name = rawLines[idx]
+    .replace(/[^\p{L}\p{N}\s&.'-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(COMPANY_SUFFIX_RE, "")
+    .trim();
+  return name.length >= 3 ? toTitleCase(name).slice(0, 60) : null;
+}
+
+function parseReceipt(text, todayIso = today()) {
+  const rawLines = String(text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const lines = rawLines.map(normalizeReceiptLine);
+
+  const LITERS_KW = /\b(QTD|QTDE|QUANT|QUANTIDADE|VOLUME|LITROS?)\b/;
+  const PRICE_KW = /PRECO|VL\.? ?UNIT|V\. ?UNIT|\bUNIT|R\$ ?\/ ?L|\/ ?LT?\b|P\.? ?UNIT/;
+  const TOTAL_KW = /TOTAL|A PAGAR|VALOR PAGO|VLR? PAGO|\bPAGO\b/;
+  const TOTAL_SKIP = /TRIBUT|IMPOSTO|ITENS|TROCO|DESCONTO|ACRESC|QTD|LEI 12/;
+  const LITER_UNIT_RE = /(\d+[.,]\d{2,3})\s*(?:L|LT|LTS|LITROS?)\b/g;
+
+  // Candidatos com pontuação: palavra-chave/unidade valem mais
+  const liters = [];
+  const prices = [];
+  const totals = [];
+  const all = [];
+  const add = (arr, value, score) => {
+    if (!arr.some((c) => Math.abs(c.value - value) < 1e-9 && c.score >= score)) {
+      arr.push({ value, score });
+    }
+  };
+
+  // Linhas de identificação: os números delas nunca são litros/preço/total
+  const ID_LINE_RE = /CNPJ|CPF|\bCEP\b|FONE|\bTEL|\bIE\b|INSC|CHAVE|PROTOCOLO|AUTORIZ|\bNSU\b|\bAUT\b|\bDOC\b|SERIE/;
+
+  lines.forEach((line) => {
+    if (ID_LINE_RE.test(line)) return;
+    const nums = decimalsIn(line);
+    nums.forEach((n) => all.push(n));
+
+    // Litros com unidade explícita: "40,123 L"
+    for (const m of line.matchAll(LITER_UNIT_RE)) {
+      const v = parseBrNumber(m[1]);
+      if (v !== null && inRange(v, RECEIPT_LIMITS.liters)) add(liters, v, 3);
+    }
+    if (LITERS_KW.test(line)) {
+      nums.forEach((n) => inRange(n.value, RECEIPT_LIMITS.liters) && add(liters, n.value, 2));
+    }
+    if (PRICE_KW.test(line)) {
+      nums.forEach((n) => inRange(n.value, RECEIPT_LIMITS.price) && add(prices, n.value, n.decimals === 3 ? 3 : 2));
+    }
+    if (TOTAL_KW.test(line) && !TOTAL_SKIP.test(line)) {
+      nums.forEach((n) => inRange(n.value, RECEIPT_LIMITS.total) && add(totals, n.value, 2));
+    }
+  });
+
+  // Qualquer número plausível também entra, com pontuação baixa
+  all.forEach((n) => {
+    if (inRange(n.value, RECEIPT_LIMITS.liters)) add(liters, n.value, 0);
+    if (inRange(n.value, RECEIPT_LIMITS.price)) add(prices, n.value, 0);
+    if (inRange(n.value, RECEIPT_LIMITS.total)) add(totals, n.value, 0);
+  });
+
+  // Validação cruzada: melhor trio em que litros × preço fecha com o total
+  const closes = (l, p, t) => Math.abs(l * p - t) <= Math.max(0.05, t * 0.005);
+  let best = null;
+  liters.forEach((l) =>
+    prices.forEach((p) => {
+      if (l.value === p.value) return;
+      totals.forEach((t) => {
+        if (t.value === l.value || t.value === p.value) return;
+        if (!closes(l.value, p.value, t.value)) return;
+        const score = l.score + p.score + t.score;
+        if (!best || score > best.score) best = { l: l.value, p: p.value, t: t.value, score };
+      });
+    }),
+  );
+
+  const top = (arr, minScore = 1) => {
+    const c = arr.filter((x) => x.score >= minScore).sort((a, b) => b.score - a.score)[0];
+    return c ? c.value : null;
+  };
+
+  let litersV = null;
+  let priceV = null;
+  let totalV = null;
+  if (best) {
+    [litersV, priceV, totalV] = [best.l, best.p, best.t];
+  } else {
+    // Sem trio fechado: usa só candidatos com palavra-chave/unidade e completa o que der
+    litersV = top(liters);
+    priceV = top(prices);
+    totalV = top(totals);
+    if (litersV && priceV && !totalV) totalV = litersV * priceV;
+    if (litersV && totalV && !priceV) {
+      const p = totalV / litersV;
+      priceV = inRange(p, RECEIPT_LIMITS.price) ? p : null;
+    }
+    if (priceV && totalV && !litersV) {
+      const l = totalV / priceV;
+      litersV = inRange(l, RECEIPT_LIMITS.liters) ? l : null;
+    }
+  }
+
+  const round = (n, d) => (n === null ? null : Math.round(n * 10 ** d) / 10 ** d);
+  return {
+    date: parseReceiptDate(lines, todayIso),
+    liters: round(litersV, 3),
+    price: round(priceV, 3),
+    total: round(totalV, 2),
+    station: parseReceiptStation(rawLines, lines),
+  };
+}
+
+/* ═══════════════════════════════
+   RECIBO DO POSTO — LEITURA POR FOTO (OCR NO APARELHO)
+   Tesseract.js hospedado em /vendor e baixado só no primeiro uso.
+   A foto nunca sai do aparelho.
+═══════════════════════════════ */
+const ReceiptScanner = (() => {
+  const BASE = "/vendor/tesseract/v7.0.0";
+  const MAX_SIDE = 1600; // mais que isso só deixa lento no celular
+  const MIN_SIDE = 1000; // abaixo disso o OCR erra mais: amplia
+
+  let libPromise = null;
+  function loadOcrLib() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    if (!libPromise) {
+      libPromise = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = `${BASE}/tesseract.min.js`;
+        s.async = true;
+        s.onload = () => resolve(window.Tesseract);
+        s.onerror = () => {
+          libPromise = null;
+          s.remove();
+          reject(new Error("não foi possível baixar o leitor"));
+        };
+        document.head.appendChild(s);
+      });
+    }
+    return libPromise;
+  }
+
+  async function loadBitmap(file) {
+    try {
+      // "from-image" aplica a rotação EXIF das fotos de celular
+      return await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch {
+      const url = URL.createObjectURL(file);
+      try {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        return img;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+  }
+
+  // Redimensiona, passa para tons de cinza e estica o contraste (recibo térmico desbotado)
+  async function preprocessImage(file) {
+    const src = await loadBitmap(file);
+    const w0 = src.width;
+    const h0 = src.height;
+    const longSide = Math.max(w0, h0);
+    let scale = 1;
+    if (longSide > MAX_SIDE) scale = MAX_SIDE / longSide;
+    else if (longSide < MIN_SIDE) scale = MIN_SIDE / longSide;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(w0 * scale);
+    canvas.height = Math.round(h0 * scale);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+    if (src.close) src.close();
+
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const px = img.data;
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < px.length; i += 4) {
+      const g = Math.round(px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114);
+      px[i] = g;
+      hist[g]++;
+    }
+    // Percentis 2% e 98% → ignora pontos muito escuros/claros isolados
+    const total = px.length / 4;
+    let lo = 0;
+    let hi = 255;
+    for (let acc = 0; lo < 255 && (acc += hist[lo]) < total * 0.02; lo++);
+    for (let acc = 0; hi > 0 && (acc += hist[hi]) < total * 0.02; hi--);
+    const range = Math.max(hi - lo, 1);
+    for (let i = 0; i < px.length; i += 4) {
+      const v = Math.max(0, Math.min(255, ((px[i] - lo) * 255) / range));
+      px[i] = px[i + 1] = px[i + 2] = v;
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+
+  // ── UI ──
+  let btn;
+  let label;
+  let status;
+  let input;
+  let busy = false;
+
+  function setStatus(text) {
+    status.hidden = !text;
+    status.textContent = text || "";
+  }
+
+  function setBusy(on, text = "") {
+    busy = on;
+    btn.disabled = on;
+    btn.classList.toggle("btn--loading", on);
+    label.textContent = on ? "Lendo…" : "Ler recibo";
+    setStatus(text);
+  }
+
+  const STAGES = {
+    "loading tesseract core": "Baixando leitor",
+    "loading language traineddata": "Baixando idioma",
+    "initializing api": "Preparando leitor",
+    "recognizing text": "Lendo recibo",
+  };
+  function onProgress(m) {
+    const stage = STAGES[m.status];
+    if (!stage) return;
+    const pct = typeof m.progress === "number" ? ` ${Math.round(m.progress * 100)}%` : "";
+    setStatus(`${stage}…${pct}`);
+  }
+
+  function markFilled(el, value) {
+    el.value = value;
+    el.classList.add("field--autofilled");
+    el.addEventListener("input", () => el.classList.remove("field--autofilled"), { once: true });
+  }
+
+  function fillForm(r) {
+    let filled = 0;
+    const set = (id, value) => {
+      if (value === null || value === undefined || value === "") return;
+      markFilled(document.getElementById(id), value);
+      filled++;
+    };
+    set("fuelDate", r.date);
+    set("fuelLiters", r.liters !== null ? String(r.liters) : null);
+    set("fuelPrice", r.price !== null ? String(r.price) : null);
+    set("fuelStation", r.station);
+    return filled;
+  }
+
+  async function scan(file) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Escolha uma foto do recibo.", "error");
+      return;
+    }
+
+    setBusy(true, "Preparando foto…");
+    let worker = null;
+    try {
+      const canvas = await preprocessImage(file);
+      const Tesseract = await loadOcrLib();
+      worker = await Tesseract.createWorker("por", 1, {
+        workerPath: `${BASE}/worker.min.js`,
+        corePath: `${BASE}/core`, // o worker escolhe a variante (SIMD ou não)
+        langPath: `${BASE}/lang`,
+        workerBlobURL: false, // worker carregado do próprio site (CSP)
+        gzip: true,
+        logger: onProgress,
+      });
+      // PSM 4: uma coluna de texto com tamanhos variados (formato de cupom)
+      await worker.setParameters({ tessedit_pageseg_mode: "4", preserve_interword_spaces: "1" });
+      const { data } = await worker.recognize(canvas);
+      console.info("[Recibo] texto lido pelo OCR:\n" + data.text);
+
+      const result = parseReceipt(data.text);
+      const filled = fillForm(result);
+      if (filled === 0) {
+        showToast(
+          "Não consegui ler o recibo. Tente uma foto reta, bem iluminada e só com o recibo.",
+          "error",
+          6000,
+        );
+        return;
+      }
+      updateCalcPreview();
+      document.getElementById("fuelOdo").focus();
+      const missing = [];
+      if (result.liters === null) missing.push("litros");
+      if (result.price === null) missing.push("preço");
+      showToast(
+        `${filled} campo${filled !== 1 ? "s" : ""} preenchido${filled !== 1 ? "s" : ""} pelo recibo` +
+          (missing.length ? ` (faltou: ${missing.join(" e ")})` : "") +
+          ". Confira e informe a KM.",
+        "info",
+        6000,
+      );
+    } catch (err) {
+      console.error("[Recibo] falha no OCR:", err);
+      showToast(`Erro ao ler o recibo: ${err.message || "falha desconhecida"}.`, "error", 5000);
+    } finally {
+      if (worker) worker.terminate().catch(() => {});
+      setBusy(false);
+    }
+  }
+
+  function init() {
+    btn = document.getElementById("btnScanReceipt");
+    label = document.getElementById("btnScanReceiptLabel");
+    status = document.getElementById("ocrStatus");
+    input = document.getElementById("receiptFile");
+
+    btn.addEventListener("click", () => {
+      if (busy) return;
+      if (!getSelectedCar()) {
+        showToast("Cadastre ou selecione um veículo primeiro.", "error");
+        return;
+      }
+      input.click();
+    });
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      input.value = ""; // permite escolher a mesma foto de novo
+      scan(file);
+    });
+  }
+
+  return { init };
+})();
+
+/* ═══════════════════════════════
    BACKUP — EXPORTAR / IMPORTAR
    O arquivo importado é tratado como não confiável: cada registro é
    reconstruído campo a campo (só campos conhecidos, tipos e tamanhos
@@ -1980,6 +2416,7 @@ function init() {
   PTR.init();
 
   Backup.init();
+  ReceiptScanner.init();
 
   // Pede ao navegador para não apagar o localStorage quando faltar espaço
   if (navigator.storage && navigator.storage.persist) {

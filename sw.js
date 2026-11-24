@@ -1,13 +1,19 @@
 /**
  * AutoGest Service Worker
- * Estratégia: Cache-first para assets locais (inclui Chart.js e fonte), Network-first para o resto
+ * Estratégia: Cache-first para assets locais (inclui Chart.js e fonte) e para /vendor/
+ * (baixado só no primeiro uso), Network-first para o resto
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_VERSION = "v10";
+const CACHE_VERSION = "v11";
 const CACHE_NAME = `autogest-${CACHE_VERSION}`;
 const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
 const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;
+// Bibliotecas grandes sob demanda (leitor de recibo). Fora do CACHE_VERSION de
+// propósito: atualizar o app não deve apagar ~5 MB já baixados. Cada versão da
+// biblioteca fica numa pasta própria (/vendor/tesseract/v7.0.0/), então URLs novas
+// nunca colidem com as antigas.
+const CACHE_VENDOR = "autogest-vendor-1";
 
 // Arquivos locais que devem ser cacheados imediatamente (caminhos absolutos a partir da raiz)
 const STATIC_ASSETS = [
@@ -50,7 +56,10 @@ self.addEventListener("activate", (event) => {
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
-            .filter((name) => name !== CACHE_STATIC && name !== CACHE_CDN)
+            .filter(
+              (name) =>
+                name !== CACHE_STATIC && name !== CACHE_CDN && name !== CACHE_VENDOR,
+            )
             .map((name) => {
               console.log("[SW] Removendo cache antigo:", name);
               return caches.delete(name);
@@ -70,7 +79,10 @@ self.addEventListener("fetch", (event) => {
   if (!url.protocol.startsWith("http")) return;
 
   // Estratégia por tipo de recurso
-  if (isStaticAsset(url)) {
+  if (url.origin === location.origin && url.pathname.startsWith("/vendor/")) {
+    // Cache-first, mas só no primeiro uso (sem pré-cache: é grande)
+    event.respondWith(cacheFirst(request, CACHE_VENDOR));
+  } else if (isStaticAsset(url)) {
     // Cache-first para assets locais
     event.respondWith(cacheFirst(request, CACHE_STATIC));
   } else {

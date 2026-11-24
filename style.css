@@ -1431,6 +1431,32 @@ ul {
 }
 
 /* ══════════════════════════════════════════════════
+   LER RECIBO (OCR)
+═══════════════════════════════════════════════════ */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.btn--loading .i {
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.ocr-status {
+  margin: -8px 0 12px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+/* Campo preenchido pelo recibo: borda azul até a pessoa editar */
+input.field--autofilled {
+  border-color: var(--accent-blue);
+  background: var(--accent-soft);
+}
+
+/* ══════════════════════════════════════════════════
    ACESSIBILIDADE
 ═══════════════════════════════════════════════════ */
 /* Foco visível só para teclado (não aparece no clique/toque) */
