@@ -1155,6 +1155,12 @@ ul {
  * do Chrome/Android não dispare junto com o nosso customizado,
  * sem quebrar o scroll interno das telas.
  */
+
+/* Desktop: o indicador não existe (sem isto o SVG renderiza sem tamanho = gigante) */
+.ptr-indicator {
+  display: none;
+}
+
 @media (max-width: 768px) {
   body {
     overscroll-behavior-y: contain;
