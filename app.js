@@ -166,8 +166,9 @@ const renderState = {
   maintenance: { dirty: true, rendered: false },
 };
 
-let currentScreen = "dashboard";
-let lastScreenEl = null;
+// null até o primeiro navigateTo() — garante que a tela inicial seja renderizada
+let currentScreen = null;
+let lastScreenEl = document.querySelector(".screen.active");
 
 function markDirty(screenId) {
   if (renderState[screenId]) renderState[screenId].dirty = true;
@@ -476,7 +477,7 @@ function renderDashboardMaint(maints, car) {
 
   if (pending.length === 0) {
     empty.style.display = "block";
-    grid.innerHTML = ""; // single DOM operation
+    grid.replaceChildren(empty); // preserva o empty state
     return;
   }
   empty.style.display = "none";
@@ -514,8 +515,7 @@ function renderDashboardMaint(maints, car) {
     `;
     frag.appendChild(card);
   });
-  grid.innerHTML = "";
-  grid.appendChild(frag);
+  grid.replaceChildren(empty, frag);
 }
 
 // Helpers for date string math (no new Date in hot path)
@@ -542,7 +542,7 @@ function renderGarageScreen() {
   const selectedId = DB.getSelectedCar();
 
   if (cars.length === 0) {
-    list.innerHTML = ""; // single DOM operation
+    list.replaceChildren(emptyEl); // preserva o empty state
     emptyEl.style.display = "flex";
     return;
   }
@@ -572,8 +572,7 @@ function renderGarageScreen() {
     `;
     frag.appendChild(card);
   });
-  list.innerHTML = "";
-  list.appendChild(frag);
+  list.replaceChildren(emptyEl, frag);
 }
 
 // Show/hide car form
@@ -756,7 +755,7 @@ function renderFuelHistory(carId, fuels) {
   const sorted = [...fuels].sort((a, b) => b.odometer - a.odometer); // newest first
 
   if (sorted.length === 0) {
-    list.innerHTML = "";
+    list.replaceChildren(emptyEl);
     emptyEl.style.display = "block";
     return;
   }
@@ -791,8 +790,7 @@ function renderFuelHistory(carId, fuels) {
     `;
     frag.appendChild(item);
   });
-  list.innerHTML = "";
-  list.appendChild(frag);
+  list.replaceChildren(emptyEl, frag);
 }
 
 // Live calculation preview
@@ -940,7 +938,7 @@ function renderMaintScreen() {
   ); // ISO string compare
 
   if (maints.length === 0) {
-    list.innerHTML = "";
+    list.replaceChildren(emptyEl);
     emptyEl.style.display = "flex";
     return;
   }
@@ -990,8 +988,7 @@ function renderMaintScreen() {
     `;
     frag.appendChild(item);
   });
-  list.innerHTML = "";
-  list.appendChild(frag);
+  list.replaceChildren(emptyEl, frag);
 }
 
 // Show maint form
@@ -1404,6 +1401,12 @@ const PTR = (() => {
    INIT
 ═══════════════════════════════ */
 function init() {
+  // Seed demo data if first run (antes de renderizar qualquer tela)
+  if (DB.getCars().length === 0 && !localStorage.getItem("ag_seeded")) {
+    seedDemoData();
+    localStorage.setItem("ag_seeded", "1");
+  }
+
   rebuildCarSelector();
 
   // Handle deep linking from PWA manifest shortcuts (e.g., ?screen=fuel)
@@ -1417,17 +1420,8 @@ function init() {
   // Navigate to initial screen (handles rendering)
   navigateTo(startScreen);
 
-  // define lastScreenEl now that the dashboard is rendered
-  lastScreenEl = document.getElementById(`screen-${startScreen}`);
-
   // Initialize pull-to-refresh (gerencia internamente mobile vs desktop)
   PTR.init();
-
-  // Seed demo data if first run
-  if (DB.getCars().length === 0 && !localStorage.getItem("ag_seeded")) {
-    seedDemoData();
-    localStorage.setItem("ag_seeded", "1");
-  }
 }
 
 function seedDemoData() {
@@ -1573,9 +1567,6 @@ function seedDemoData() {
     },
   ];
   DB.saveMaints(maints);
-
-  rebuildCarSelector();
-  renderDashboard();
 }
 
 // Service Worker Registration (PWA)
