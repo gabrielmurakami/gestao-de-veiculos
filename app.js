@@ -349,18 +349,13 @@ function rebuildCarSelector() {
 carSel.addEventListener("change", () => {
   DB.setSelectedCar(carSel.value);
   invalidateCarScreens(); // dashboard, fuel, maintenance mudam com o carro selecionado
+  markDirty("garage"); // destaque do carro selecionado na Garagem
   renderCurrentScreen();
 });
 
 function getSelectedCar() {
   const id = DB.getSelectedCar() || carSel.value;
   return DB.getCars().find((c) => c.id === id) || null;
-}
-
-function renderCurrentScreen() {
-  if (currentScreen === "dashboard") renderDashboard();
-  if (currentScreen === "fuel") renderFuelScreen();
-  if (currentScreen === "maintenance") renderMaintScreen();
 }
 
 /* ═══════════════════════════════
@@ -1640,6 +1635,8 @@ const PTR = (() => {
           DB.invalidate(k),
         );
         rebuildCarSelector();
+        // Dados relidos do storage: todas as telas ficam desatualizadas
+        Object.keys(renderState).forEach(markDirty);
         renderCurrentScreen();
       } catch (err) {
         console.error("[PTR] Erro durante refresh:", err);
