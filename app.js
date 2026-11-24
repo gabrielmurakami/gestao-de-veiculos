@@ -1981,14 +1981,6 @@ function init() {
 
   Backup.init();
 
-  // Tema claro/escuro do sistema mudou: gráficos precisam pegar as novas cores
-  window
-    .matchMedia("(prefers-color-scheme: light)")
-    .addEventListener("change", () => {
-      markDirty("dashboard");
-      renderCurrentScreen();
-    });
-
   // Pede ao navegador para não apagar o localStorage quando faltar espaço
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persisted().then((ok) => {
