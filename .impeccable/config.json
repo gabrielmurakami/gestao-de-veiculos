@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "em-dash-overuse",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-24T02:23:19.934Z",
+        "reason": "Claude verified: em-dashes are the empty-value placeholder in KPI tiles (— km/l) and date separators, not prose style"
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "index.html"
+        ],
+        "createdAt": "2026-11-24T02:23:29.151Z",
+        "reason": "Claude verified: the only nested-cards hit is #carSelectorWrap, the bordered vehicle selector inside the topbar header, not a card nested in a card"
+      }
+    ]
+  }
+}

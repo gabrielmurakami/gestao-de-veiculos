@@ -120,7 +120,7 @@ gestao-de-veiculos/
   /* Texto */
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
-  --text-muted: #4b6280;
+  --text-muted: #8196b3;
 
   /* Espaçamento & Bordas */
   --gap: 16px;

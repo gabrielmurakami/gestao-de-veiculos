@@ -92,7 +92,10 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 function fmt(n, dec = 2) {
-  return typeof n === "number" && !isNaN(n) ? n.toFixed(dec) : "—";
+  // Formato pt-BR (vírgula decimal, ponto de milhar), como os valores em R$
+  return typeof n === "number" && !isNaN(n)
+    ? n.toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec })
+    : "—";
 }
 function fmtDate(str) {
   if (!str) return "—";
@@ -154,7 +157,9 @@ function showToast(msg, type = "success", duration = 3000, action = null) {
   const close = () => {
     if (closed) return;
     closed = true;
-    t.style.animation = "slideOut .25s ease forwards";
+    t.style.animation = prefersReducedMotion()
+      ? "fadeOut .2s ease forwards"
+      : "slideOut .25s ease forwards";
     t.addEventListener("animationend", () => t.remove());
     setTimeout(() => t.remove(), 400); // garante remoção mesmo sem animação
   };
@@ -192,21 +197,49 @@ function showUndoToast(msg, restore) {
 /* ═══════════════════════════════
    CONFIRM MODAL
 ═══════════════════════════════ */
+// Diálogo acessível: foco entra no modal (em "Cancelar", a opção segura),
+// Tab fica preso dentro dele, Esc cancela e o foco volta para quem abriu.
 let _confirmCb = null;
+let _confirmReturnFocus = null;
+const modalOverlay = document.getElementById("modalOverlay");
+const modalCancel = document.getElementById("modalCancel");
+const modalConfirm = document.getElementById("modalConfirm");
+
 function showConfirm(title, message, cb) {
   document.getElementById("modalTitle").textContent = title;
   document.getElementById("modalMessage").textContent = message;
-  document.getElementById("modalOverlay").style.display = "flex";
+  _confirmReturnFocus = document.activeElement;
+  modalOverlay.style.display = "flex";
   _confirmCb = cb;
+  modalCancel.focus();
 }
-document.getElementById("modalConfirm").addEventListener("click", () => {
-  document.getElementById("modalOverlay").style.display = "none";
-  if (_confirmCb) _confirmCb();
+
+function closeConfirm(confirmed) {
+  modalOverlay.style.display = "none";
+  const cb = _confirmCb;
   _confirmCb = null;
+  // Devolve o foco antes do callback (que pode redesenhar a lista e remover o botão)
+  if (_confirmReturnFocus && document.contains(_confirmReturnFocus)) {
+    _confirmReturnFocus.focus();
+  }
+  _confirmReturnFocus = null;
+  if (confirmed && cb) cb();
+}
+
+modalConfirm.addEventListener("click", () => closeConfirm(true));
+modalCancel.addEventListener("click", () => closeConfirm(false));
+modalOverlay.addEventListener("click", (e) => {
+  if (e.target === modalOverlay) closeConfirm(false); // clique fora cancela
 });
-document.getElementById("modalCancel").addEventListener("click", () => {
-  document.getElementById("modalOverlay").style.display = "none";
-  _confirmCb = null;
+modalOverlay.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeConfirm(false);
+  } else if (e.key === "Tab") {
+    // Só existem 2 botões: alterna entre eles
+    e.preventDefault();
+    (document.activeElement === modalCancel ? modalConfirm : modalCancel).focus();
+  }
 });
 
 /* ═══════════════════════════════
@@ -491,7 +524,8 @@ function monthlySpendSeries(fuels, months = 6) {
   const priced = fuels.filter((f) => f.price > 0);
   if (priced.length === 0) return { labels: [], data: [], hasPrice: false, isCurrent: true };
 
-  const lastKey = priced.map((f) => f.date.slice(0, 7)).sort().at(-1); // "YYYY-MM"
+  const monthKeys = priced.map((f) => f.date.slice(0, 7)).sort();
+  const lastKey = monthKeys[monthKeys.length - 1]; // "YYYY-MM"
   const currentKey = today().slice(0, 7);
   const isCurrent = lastKey >= currentKey;
   const [endY, endM] = (isCurrent ? currentKey : lastKey).split("-").map(Number);
@@ -513,7 +547,7 @@ function monthlySpendSeries(fuels, months = 6) {
     data: keys.map((k) => +totals[k].toFixed(2)),
     hasPrice: true,
     isCurrent,
-    endLabel: labels.at(-1),
+    endLabel: labels[labels.length - 1],
   };
 }
 
@@ -696,7 +730,7 @@ function renderDashboard() {
     "kpiLastOdo",
     (lastFuel ? lastFuel.odometer : car.odometer).toLocaleString("pt-BR"),
   );
-  setText("kpiLastFuel", lastFuel ? `${fmt(lastFuel.liters, 1)}L` : "—");
+  setText("kpiLastFuel", lastFuel ? `${fmt(lastFuel.liters, 1)} L` : "—");
   setText("kpiLastDate", lastFuel ? fmtDate(lastFuel.date) : "—");
 
   const costs = calcFuelCosts(fuels);
@@ -868,7 +902,7 @@ function renderGarageScreen() {
         <div class="car-card__name">${esc(car.name)}</div>
         <div class="car-card__sub">
           ${esc(car.model)} · ${esc(car.year)} · <span class="car-pill">${esc(car.fuel)}</span>
-          ${avg !== null ? `· <strong style="color:var(--accent-green)">${fmt(avg)} km/l</strong>` : ""}
+          ${avg !== null ? `· <strong class="car-card__kml">${fmt(avg)} km/l</strong>` : ""}
         </div>
       </div>
       <div class="car-card__actions">
@@ -1045,7 +1079,7 @@ function renderFuelScreen() {
     return;
   }
   noCar.style.display = "none";
-  formWrap.style.display = "block";
+  formWrap.style.display = ""; // CSS decide: coluna única ou grid no desktop
 
   // Context header
   document.getElementById("fuelCarContext").innerHTML =
@@ -1092,12 +1126,12 @@ function renderFuelHistory(carId, fuels) {
       <div class="fuel-history-item__icon">${icon("fuel")}</div>
       <div class="fuel-history-item__info">
         <div class="fuel-history-item__main">
-          ${f.liters.toFixed(1)}L — ${fmtDate(f.date)}
-          ${f.station ? `<small style="color:var(--text-muted)"> · ${esc(f.station)}</small>` : ""}
+          <span class="nowrap">${fmt(f.liters, 1)} L — ${fmtDate(f.date)}</span>
+          ${f.station ? `<small class="fuel-history-item__station"> · <span class="nowrap">${esc(f.station)}</span></small>` : ""}
         </div>
         <div class="fuel-history-item__sub">
-          ${f.odometer.toLocaleString("pt-BR")} km
-          ${f.price ? ` · R$ ${fmt(f.price)}/L · Total: R$ ${fmt(f.liters * f.price)}` : ""}
+          <span class="nowrap">${f.odometer.toLocaleString("pt-BR")} km</span>
+          ${f.price ? ` · <span class="nowrap">${fmtMoney(f.price)}/L</span> · <span class="nowrap">Total: ${fmtMoney(f.liters * f.price)}</span>` : ""}
         </div>
       </div>
       <div class="fuel-history-item__kml">
@@ -1139,7 +1173,7 @@ function updateCalcPreview() {
   document.getElementById("calcKml").textContent =
     kml !== null ? `${fmt(kml)} km/l` : "—";
   document.getElementById("calcTotal").textContent =
-    price && liters ? `R$ ${fmt(liters * price)}` : "—";
+    price && liters ? fmtMoney(liters * price) : "—";
 }
 
 ["fuelOdo", "fuelLiters", "fuelPrice"].forEach((id) => {
@@ -1296,8 +1330,8 @@ function renderMaintScreen() {
         <div class="maint-list-item__type">${esc(m.type)}</div>
         <div class="maint-list-item__meta">
           ${icon("calendar")} ${fmtDate(m.date)}
-          ${m.km ? ` · ${icon("gauge")} ${parseInt(m.km).toLocaleString("pt-BR")} km${kmStatus && !kmStatus.overdue ? ` (${kmStatus.text})` : ""}` : ""}
-          · <span style="color:${stripeColor}">${statusLabel}</span>
+          ${m.km ? ` · ${icon("gauge")} ${parseInt(m.km).toLocaleString("pt-BR")} km${kmStatus && !kmStatus.overdue ? ` · ${kmStatus.text}` : ""}` : ""}
+          · <span style="color:${stripeColor === "var(--accent-red)" ? "var(--accent-red-text)" : stripeColor}">${statusLabel}</span>
           ${m.notes ? `<br><small style="color:var(--text-muted)">${esc(m.notes)}</small>` : ""}
         </div>
       </div>
@@ -1499,11 +1533,20 @@ const PTR = (() => {
     indicator.style.transform = `translateX(-50%) translateY(-80px)`;
     indicator.style.opacity = 0;
 
-    // Remove classes e transition após animação
-    content.addEventListener("transitionend", _cleanupSnap, { once: true });
+    // Remove classes e transition após animação. O timeout cobre o caso em que
+    // transitionend nunca dispara (ex.: "reduzir movimento" desliga a transição).
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      _cleanupSnap();
+    };
+    content.addEventListener("transitionend", finish, { once: true });
+    setTimeout(finish, 450);
   }
 
   function _cleanupSnap() {
+    wrapper.classList.remove("is-pulling"); // desliga will-change em repouso
     content.classList.remove("ptr-content--snap");
     content.style.transform = "";
     indicator.style.transition = "";
@@ -1552,6 +1595,7 @@ const PTR = (() => {
       if (wrapper.scrollTop > 0) return;
       intentDown = true;
       pulling = true;
+      wrapper.classList.add("is-pulling"); // liga will-change só durante o gesto
     }
 
     if (!pulling) return;
@@ -1782,12 +1826,33 @@ function parseReceiptDate(lines, todayIso) {
       if (!best || iso > best) best = iso;
     }
   });
+  if (best) return best;
+
+  // Ano ilegível (ex.: OCR leu "16/11/2906"): usa dia/mês na ocorrência mais
+  // recente que não seja futura. Recibo é sempre recente e a pessoa confere.
+  const ddmm = /\b(\d{2})[/.-](\d{2})[/.-]\S{2,4}/g;
+  const thisYear = Number(todayIso.slice(0, 4));
+  lines.forEach((line) => {
+    for (const [, d, mo] of line.matchAll(ddmm)) {
+      for (const y of [thisYear, thisYear - 1]) {
+        const iso = `${y}-${mo}-${d}`;
+        const ms = Date.parse(iso);
+        if (!Number.isFinite(ms) || new Date(ms).getUTCDate() !== Number(d)) continue;
+        if (ms > todayMs || ms < minMs) continue;
+        if (!best || iso > best) best = iso;
+        break;
+      }
+    }
+  });
   return best;
 }
 
-const STATION_SKIP_RE =
-  /CNPJ|CPF|\bIE\b|INSC|\bRUA\b|\bR\.|\bAV\b|AVENIDA|ROD\b|RODOVIA|\bTEL|FONE|\bCEP\b|DANFE|NFC|NOTA FISCAL|DOCUMENTO|CUPOM|EXTRATO|\bSAT\b|CONSUMIDOR|\bVIA\b|COMPROVANTE|\d{2}\.\d{3}/;
 const COMPANY_SUFFIX_RE = /\s+(LTDA\.?|EIRELI|ME|EPP|S\/?A|S\.A\.?)\s*$/i;
+// Palavras que aparecem em nome de posto/rede
+const STATION_KW_RE =
+  /\bPOSTO\b|COMBUST|PETRO|DERIVADOS|AUTO ?SERV|SHELL|IPIRANGA|RAIZEN|\bALE\b|GRAAL|\bREDE\b/;
+// Tudo a partir daqui é de outra parte do cupom (cliente, cabeçalho fiscal etc.)
+const STATION_STOP_RE = /DESTINATARIO|CONSUMIDOR|CLIENTE|TIPO OPERA|SERIE|PROTOCOLO|CHAVE/;
 
 function toTitleCase(s) {
   return s
@@ -1795,23 +1860,28 @@ function toTitleCase(s) {
     .replace(/(^|[\s/-])([a-zà-ú])/g, (m, sep, ch) => sep + ch.toUpperCase());
 }
 
+/**
+ * Nome do posto. Prioriza precisão: se o cabeçalho estiver apagado,
+ * devolve null em vez de chutar uma linha qualquer.
+ * 1. Linha com palavra típica de posto (POSTO, COMBUSTÍVEIS, SHELL…),
+ *    antes de qualquer seção de destinatário/cliente.
+ * 2. Senão, a linha logo antes do 1º CNPJ, se estiver no topo do cupom.
+ */
 function parseReceiptStation(rawLines, normLines) {
-  const head = normLines.slice(0, 8);
-  // Linha com "POSTO": nomes como "Posto Avenida" ou "Posto Rodovia" são válidos,
-  // então só descarta se for linha de documento (CNPJ etc.)
+  let end = normLines.findIndex((l) => STATION_STOP_RE.test(l));
+  if (end === -1) end = normLines.length;
+  const head = normLines.slice(0, Math.min(end, 8));
+
   let idx = head.findIndex(
-    (l) => /\bPOSTO\b/.test(l) && !/CNPJ|CPF|\bIE\b|\d{2}\.\d{3}|COMPROVANTE/.test(l),
+    (l) => STATION_KW_RE.test(l) && !/CNPJ|CPF|\bIE\b|\d{2}\.\d{3}|COMPROVANTE|R\$/.test(l),
   );
   if (idx === -1) {
-    idx = head.findIndex((l) => {
-      const letters = (l.match(/[A-Z]/g) || []).length;
-      return (
-        letters >= 4 &&
-        letters / l.replace(/\s/g, "").length > 0.6 &&
-        !STATION_SKIP_RE.test(l) &&
-        !/R\$|VALOR|TOTAL|\d[.,]\d/.test(l)
-      );
-    });
+    const cnpj = head.findIndex((l) => /CNPJ/.test(l));
+    if (cnpj >= 1 && cnpj <= 3) {
+      const cand = head[cnpj - 1];
+      const letters = (cand.match(/[A-Z]/g) || []).length;
+      if (letters >= 4 && letters / cand.replace(/\s/g, "").length > 0.8) idx = cnpj - 1;
+    }
   }
   if (idx === -1) return null;
   const name = rawLines[idx]
@@ -1834,7 +1904,12 @@ function parseReceipt(text, todayIso = today()) {
   const PRICE_KW = /PRECO|VL\.? ?UNIT|V\. ?UNIT|\bUNIT|R\$ ?\/ ?L|\/ ?LT?\b|P\.? ?UNIT/;
   const TOTAL_KW = /TOTAL|A PAGAR|VALOR PAGO|VLR? PAGO|\bPAGO\b/;
   const TOTAL_SKIP = /TRIBUT|IMPOSTO|ITENS|TROCO|DESCONTO|ACRESC|QTD|LEI 12/;
-  const LITER_UNIT_RE = /(\d+[.,]\d{2,3})\s*(?:L|LT|LTS|LITROS?)\b/g;
+  // "40,123 L" (com decimais: forte) ou "30 LT" (inteiro: um pouco menos forte)
+  // (sem lookbehind: Safari < 16.4 não suporta e quebraria o app.js inteiro)
+  const LITER_UNIT_RE = /(?:^|[^\d.,])(\d{1,3}(?:[.,]\d{1,3})?)\s*(?:L|LT|LTS|LITROS?)\b/g;
+  // Linha de item "30 LT x 4,29" / "40,123 L X 6,090": quantidade × preço unitário
+  const QTY_X_PRICE_RE =
+    /(?:^|[^\d.,])(\d{1,3}(?:[.,]\d{1,3})?)\s*(?:L|LT|LTS|LITROS?)?\s*[X×*]\s*(?:R\$\s*)?(\d+[.,]\d{2,3})/g;
 
   // Candidatos com pontuação: palavra-chave/unidade valem mais
   const liters = [];
@@ -1855,10 +1930,19 @@ function parseReceipt(text, todayIso = today()) {
     const nums = decimalsIn(line);
     nums.forEach((n) => all.push(n));
 
-    // Litros com unidade explícita: "40,123 L"
+    // Litros com unidade explícita: "40,123 L" / "30 LT"
     for (const m of line.matchAll(LITER_UNIT_RE)) {
       const v = parseBrNumber(m[1]);
-      if (v !== null && inRange(v, RECEIPT_LIMITS.liters)) add(liters, v, 3);
+      if (v !== null && inRange(v, RECEIPT_LIMITS.liters)) add(liters, v, /[.,]/.test(m[1]) ? 3 : 2);
+    }
+    // "30 LT x 4,29": litros e preço juntos na linha do item
+    for (const m of line.matchAll(QTY_X_PRICE_RE)) {
+      const l = parseBrNumber(m[1]);
+      const p = parseBrNumber(m[2]);
+      if (l !== null && p !== null && inRange(l, RECEIPT_LIMITS.liters) && inRange(p, RECEIPT_LIMITS.price)) {
+        add(liters, l, 3);
+        add(prices, p, 3);
+      }
     }
     if (LITERS_KW.test(line)) {
       nums.forEach((n) => inRange(n.value, RECEIPT_LIMITS.liters) && add(liters, n.value, 2));
@@ -1869,6 +1953,12 @@ function parseReceipt(text, todayIso = today()) {
     if (TOTAL_KW.test(line) && !TOTAL_SKIP.test(line)) {
       nums.forEach((n) => inRange(n.value, RECEIPT_LIMITS.total) && add(totals, n.value, 2));
     }
+  });
+
+  // Total que se repete no cupom (linha do item, "VALOR TOTAL", pagamento) é mais confiável
+  totals.forEach((t) => {
+    const times = all.filter((n) => Math.abs(n.value - t.value) < 1e-9).length;
+    if (times >= 2) t.score += 1;
   });
 
   // Qualquer número plausível também entra, com pontuação baixa
@@ -1908,12 +1998,15 @@ function parseReceipt(text, todayIso = today()) {
     litersV = top(liters);
     priceV = top(prices);
     totalV = top(totals);
-    if (litersV && priceV && !totalV) totalV = litersV * priceV;
-    if (litersV && totalV && !priceV) {
+    if (litersV && totalV) {
+      // Litros e total confiáveis, mas o preço não fecha (ex.: OCR leu 4,29 como 4,23):
+      // o preço calculado vale mais que o lido, porque o total costuma vir impresso
+      // em fonte maior e repetido no cupom.
       const p = totalV / litersV;
-      priceV = inRange(p, RECEIPT_LIMITS.price) ? p : null;
-    }
-    if (priceV && totalV && !litersV) {
+      if (inRange(p, RECEIPT_LIMITS.price)) priceV = p;
+    } else if (litersV && priceV) {
+      totalV = litersV * priceV;
+    } else if (priceV && totalV) {
       const l = totalV / priceV;
       litersV = inRange(l, RECEIPT_LIMITS.liters) ? l : null;
     }
@@ -1936,7 +2029,9 @@ function parseReceipt(text, todayIso = today()) {
 ═══════════════════════════════ */
 const ReceiptScanner = (() => {
   const BASE = "/vendor/tesseract/v7.0.0";
-  const MAX_SIDE = 1600; // mais que isso só deixa lento no celular
+  // Limite por ÁREA, não pelo lado maior: recibo é comprido e estreito, e limitar
+  // a altura deixava a largura pequena demais (letra miúda ilegível para o OCR)
+  const MAX_PIXELS = 2.6e6; // ~1070×2400 num recibo; mais que isso só deixa lento
   const MIN_SIDE = 1000; // abaixo disso o OCR erra mais: amplia
 
   let libPromise = null;
@@ -1983,7 +2078,7 @@ const ReceiptScanner = (() => {
     const h0 = src.height;
     const longSide = Math.max(w0, h0);
     let scale = 1;
-    if (longSide > MAX_SIDE) scale = MAX_SIDE / longSide;
+    if (w0 * h0 > MAX_PIXELS) scale = Math.sqrt(MAX_PIXELS / (w0 * h0));
     else if (longSide < MIN_SIDE) scale = MIN_SIDE / longSide;
 
     const canvas = document.createElement("canvas");

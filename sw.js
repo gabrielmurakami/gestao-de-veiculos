@@ -5,7 +5,7 @@
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_VERSION = "v11";
+const CACHE_VERSION = "v15";
 const CACHE_NAME = `autogest-${CACHE_VERSION}`;
 const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
 const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;

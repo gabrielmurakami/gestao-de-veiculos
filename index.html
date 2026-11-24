@@ -208,7 +208,11 @@
                 d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v9a2 2 0 01-2 2h-2M9 21a2 2 0 100-4 2 2 0 000 4zM15 21a2 2 0 100-4 2 2 0 000 4z"
               />
             </svg>
-            <select class="car-selector" id="carSelector">
+            <select
+              class="car-selector"
+              id="carSelector"
+              aria-label="Veículo selecionado"
+            >
               <option value="">Nenhum veículo</option>
             </select>
           </div>
@@ -312,7 +316,7 @@
                   <!-- Chart: consumo -->
                   <div class="chart-card">
                     <div class="chart-card__header">
-                      <h3>Histórico de consumo</h3>
+                      <h2>Histórico de consumo</h2>
                       <span class="badge" id="chartBadge">km/l</span>
                     </div>
                     <div class="chart-wrap" id="chartWrap">
@@ -330,7 +334,7 @@
                   <!-- Chart: gasto mensal -->
                   <div class="chart-card">
                     <div class="chart-card__header">
-                      <h3>Gasto mensal com combustível</h3>
+                      <h2>Gasto mensal com combustível</h2>
                       <span class="badge" id="spendBadge">últimos 6 meses</span>
                     </div>
                     <div class="chart-wrap" id="spendChartWrap">
@@ -349,7 +353,7 @@
                 <div class="dash-side">
                   <!-- Maintenance cards -->
                   <div class="section-header">
-                    <h3>Próximas manutenções</h3>
+                    <h2>Próximas manutenções</h2>
                     <button
                       class="btn btn--ghost btn--sm"
                       data-screen="maintenance"
@@ -375,7 +379,7 @@
           <!-- ─── SCREEN: GARAGEM ───────────────────── -->
           <section class="screen" id="screen-garage">
             <div class="section-header section-header--top">
-              <h3>Meus veículos</h3>
+              <h2>Meus veículos</h2>
               <button class="btn btn--primary btn--sm" id="btnShowCarForm">
                 + Adicionar
               </button>
@@ -384,7 +388,7 @@
             <!-- Form -->
             <div class="form-card" id="carFormCard" style="display: none">
               <div class="form-card__header">
-                <h4 id="carFormTitle">Novo veículo</h4>
+                <h3 id="carFormTitle">Novo veículo</h3>
                 <button
                   class="icon-btn"
                   id="btnCloseCarForm"
@@ -473,7 +477,7 @@
             <!-- Backup -->
             <div class="backup-card">
               <div class="backup-card__text">
-                <h4>Backup dos dados</h4>
+                <h3>Backup dos dados</h3>
                 <p>
                   Seus dados ficam só neste navegador. Exporte um arquivo de
                   backup para não perdê-los ou para levá-los a outro aparelho.
@@ -499,7 +503,7 @@
           <!-- ─── SCREEN: ABASTECIMENTO ─────────────── -->
           <section class="screen" id="screen-fuel">
             <div class="section-header section-header--top">
-              <h3>Registrar abastecimento</h3>
+              <h2>Registrar abastecimento</h2>
               <button class="btn btn--ghost btn--sm" id="btnScanReceipt">
                 <svg class="i" aria-hidden="true"><use href="#i-camera" /></svg>
                 <span id="btnScanReceiptLabel">Ler recibo</span>
@@ -600,12 +604,14 @@
               </div>
 
               <!-- Fuel history -->
-              <div class="section-header">
-                <h3>Histórico</h3>
-              </div>
-              <div id="fuelHistoryList">
-                <div class="empty-state empty-state--sm" id="fuelHistEmpty">
-                  <p>Nenhum abastecimento registrado para este veículo.</p>
+              <div class="fuel-history">
+                <div class="section-header">
+                  <h2>Histórico</h2>
+                </div>
+                <div id="fuelHistoryList">
+                  <div class="empty-state empty-state--sm" id="fuelHistEmpty">
+                    <p>Nenhum abastecimento registrado para este veículo.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -614,7 +620,7 @@
           <!-- ─── SCREEN: MANUTENÇÃO ────────────────── -->
           <section class="screen" id="screen-maintenance">
             <div class="section-header section-header--top">
-              <h3>Manutenções</h3>
+              <h2>Manutenções</h2>
               <button class="btn btn--primary btn--sm" id="btnShowMaintForm">
                 + Agendar
               </button>
@@ -630,7 +636,7 @@
             <!-- Form -->
             <div class="form-card" id="maintFormCard" style="display: none">
               <div class="form-card__header">
-                <h4>Nova manutenção</h4>
+                <h3>Nova manutenção</h3>
                 <button
                   class="icon-btn"
                   id="btnCloseMaintForm"
@@ -773,8 +779,14 @@
 
     <!-- CONFIRM MODAL -->
     <div class="modal-overlay" id="modalOverlay" style="display: none">
-      <div class="modal">
-        <h4 id="modalTitle">Confirmar ação</h4>
+      <div
+        class="modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="modalTitle"
+        aria-describedby="modalMessage"
+      >
+        <h2 id="modalTitle">Confirmar ação</h2>
         <p id="modalMessage">Tem certeza?</p>
         <div class="modal-actions">
           <button class="btn btn--ghost" id="modalCancel">Cancelar</button>

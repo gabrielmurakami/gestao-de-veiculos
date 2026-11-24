@@ -31,10 +31,19 @@
   --accent-green: #10b981;
   --accent-red: #ef4444;
 
+  /* Destaque usado como TEXTO sobre fundo escuro (≥ 4,5:1 em todos os fundos) */
+  --accent-blue-text: #60a5fa;
+  --accent-red-text: #f87171;
+  /* Destaque usado como FUNDO de botão com texto branco (≥ 4,5:1) */
+  --btn-primary: #2563eb;
+  --btn-primary-hover: #1d4ed8;
+  --btn-danger: #dc2626;
+  --btn-danger-hover: #b91c1c;
+
   /* Texto */
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
-  --text-muted: #4b6280;
+  --text-muted: #8196b3; /* ≥ 4,5:1 (WCAG AA) em todos os fundos fixos */
   --text-inverse: #0f1e2e;
 
   /* Bordas */
@@ -140,7 +149,7 @@ textarea {
   }
 }
 a {
-  color: var(--accent-blue);
+  color: var(--accent-blue-text);
   text-decoration: none;
 }
 ul {
@@ -229,7 +238,7 @@ ul {
 }
 .nav-item.active {
   background: var(--accent-soft);
-  color: var(--accent-blue);
+  color: var(--accent-blue-text);
 }
 .nav-icon {
   width: 18px;
@@ -285,7 +294,7 @@ ul {
   gap: 12px;
 }
 .topbar__title {
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -450,8 +459,8 @@ ul {
   justify-content: space-between;
   margin-bottom: 14px;
 }
-.chart-card__header h3 {
-  font-size: 0.9rem;
+.chart-card__header h2 {
+  font-size: 1rem;
   font-weight: 600;
 }
 .chart-wrap {
@@ -476,10 +485,10 @@ ul {
 
 /* Badge */
 .badge {
-  font-size: 0.65rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   background: var(--accent-soft);
-  color: var(--accent-blue);
+  color: var(--accent-blue-text);
   border-radius: 20px;
   padding: 2px 8px;
   text-transform: uppercase;
@@ -496,8 +505,8 @@ ul {
 .section-header--top {
   margin-bottom: 16px;
 }
-.section-header h3 {
-  font-size: 0.9rem;
+.section-header h2 {
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -517,7 +526,7 @@ ul {
 .backup-card__text {
   flex: 1 1 280px;
 }
-.backup-card__text h4 {
+.backup-card__text h3 {
   font-size: 0.875rem;
   font-weight: 600;
   margin-bottom: 4px;
@@ -586,18 +595,18 @@ ul {
   color: var(--text-secondary);
 }
 .maint-card__km {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 .maint-card__status {
-  font-size: 0.65rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 2px;
 }
 .maint-card--urgent .maint-card__status {
-  color: var(--accent-red);
+  color: var(--accent-red-text);
 }
 .maint-card--upcoming .maint-card__status {
   color: var(--accent-amber);
@@ -629,7 +638,7 @@ ul {
   justify-content: space-between;
   margin-bottom: 18px;
 }
-.form-card__header h4 {
+.form-card__header h3 {
   font-size: 0.95rem;
   font-weight: 600;
 }
@@ -680,11 +689,11 @@ ul {
   transform: scale(0.97);
 }
 .btn--primary {
-  background: var(--accent-blue);
+  background: var(--btn-primary);
   color: #fff;
 }
 .btn--primary:hover {
-  background: var(--accent-blue2);
+  background: var(--btn-primary-hover);
 }
 .btn--ghost {
   background: var(--bg-raised);
@@ -696,8 +705,11 @@ ul {
   color: var(--text-primary);
 }
 .btn--danger {
-  background: var(--accent-red);
+  background: var(--btn-danger);
   color: #fff;
+}
+.btn--danger:hover {
+  background: var(--btn-danger-hover);
 }
 .btn--danger:hover {
   opacity: 0.9;
@@ -726,7 +738,7 @@ ul {
 .link-btn {
   background: none;
   border: none;
-  color: var(--accent-blue);
+  color: var(--accent-blue-text);
   font-size: inherit;
   font-family: inherit;
   text-decoration: underline;
@@ -796,23 +808,22 @@ ul {
 }
 
 .car-pill {
-  font-size: 0.65rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 10px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  background: rgba(59, 130, 246, 0.12);
-  color: var(--accent-blue);
+  background: var(--accent-soft);
+  color: var(--accent-blue-text);
 }
 
 /* ══════════════════════════════════════════════════
    ABASTECIMENTO
 ═══════════════════════════════════════════════════ */
 .fuel-car-context {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
+  line-height: 1.5;
   padding: 8px 10px;
   background: var(--bg-raised);
   border-radius: var(--radius-sm);
@@ -895,7 +906,7 @@ ul {
 }
 .fuel-history-item__kml span {
   display: block;
-  font-size: 0.65rem;
+  font-size: 0.6875rem;
   font-weight: 400;
   color: var(--text-muted);
 }
@@ -1006,7 +1017,7 @@ ul {
   align-items: center;
   gap: 3px;
   padding: 6px 4px;
-  font-size: 0.6rem;
+  font-size: 0.6875rem;
   font-weight: 500;
   color: var(--text-muted);
   transition: color 0.15s;
@@ -1017,7 +1028,7 @@ ul {
   height: 20px;
 }
 .bnav-item.active {
-  color: var(--accent-blue);
+  color: var(--accent-blue-text);
 }
 .bnav-item:hover {
   color: var(--text-secondary);
@@ -1112,7 +1123,7 @@ ul {
   box-shadow: var(--shadow-float);
   animation: fadeIn 0.2s ease;
 }
-.modal h4 {
+.modal h2 {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 10px;
@@ -1281,7 +1292,6 @@ ul {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
     z-index: 300;
     pointer-events: none;
-    will-change: transform, opacity;
   }
 
   /* ── Ícone SVG dentro do indicador ───────────────── */
@@ -1336,8 +1346,10 @@ ul {
    * momento em que o utilizador solta o dedo, ativando a animação
    * de retorno suave.
    */
-  .ptr-content {
-    will-change: transform;
+  /* will-change é ligado pelo JS só enquanto o dedo arrasta */
+  .ptr-wrapper.is-pulling .ptr-content,
+  .ptr-wrapper.is-pulling .ptr-indicator {
+    will-change: transform, opacity;
   }
 
   .ptr-content--snap {
@@ -1368,7 +1380,7 @@ ul {
   color: var(--text-primary);
 }
 .icon-btn--danger:hover {
-  color: var(--accent-red);
+  color: var(--accent-red-text);
 }
 .btn .i {
   width: 15px;
@@ -1394,12 +1406,27 @@ ul {
   margin-left: auto;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  color: var(--accent-blue);
+  color: var(--accent-blue-text);
   font-weight: 600;
   font-size: 0.8rem;
+  min-height: 32px;
 }
 .toast__action:hover {
   background: var(--accent-soft);
+}
+
+/* Abastecimento no desktop: formulário à esquerda e histórico à direita,
+   usando a largura toda sem esticar os campos */
+@media (min-width: 1100px) {
+  #fuelFormWrap {
+    display: grid;
+    grid-template-columns: minmax(380px, 2fr) 3fr;
+    gap: var(--gap) 24px;
+    align-items: start;
+  }
+  #fuelFormWrap > .form-card {
+    margin-bottom: 0;
+  }
 }
 
 /* ══════════════════════════════════════════════════
@@ -1418,12 +1445,22 @@ ul {
 }
 
 @media (max-width: 768px) {
-  /* 6 KPIs: 2 por linha, com o destaque ocupando a linha inteira */
+  /* 6 KPIs: 2 por linha, com o destaque ocupando a linha inteira.
+     Sobram 5 → o último ocupa a linha toda em vez de ficar sozinho pela metade */
   .kpi-row {
     grid-template-columns: 1fr 1fr;
   }
-  .kpi-card--highlight {
+  .kpi-card--highlight,
+  .kpi-row > .kpi-card:last-child {
     grid-column: 1 / -1;
+  }
+  /* Alvos de toque de 44 px (o ícone continua do mesmo tamanho) */
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .btn--sm {
+    min-height: 40px;
   }
   .kpi-value--sm {
     font-size: 1.15rem;
@@ -1470,15 +1507,43 @@ textarea:focus-visible {
   outline: none; /* campos já têm borda + sombra de foco */
 }
 
+/* Movimento reduzido: remove deslocamentos e escalas, mas mantém o feedback.
+   Troca de tela e toasts viram só fade; o spinner e o pulso do "Ler recibo"
+   continuam, porque indicam progresso (movimento essencial). */
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+  }
+}
+.nowrap {
+  white-space: nowrap;
+}
+.fuel-history-item__station {
+  color: var(--text-muted);
+}
+.car-card__kml {
+  color: var(--accent-green);
+}
+@keyframes fadeOnly {
+  from {
+    opacity: 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .screen,
+  .modal,
+  .toast {
+    animation: fadeOnly 0.15s ease-out;
+  }
+  .btn:active {
+    transform: none;
+  }
+  .sidebar,
+  .ptr-content--snap,
+  .ptr-indicator__icon {
+    transition: none;
   }
 }
