@@ -44,7 +44,7 @@ Ferramenta pessoal, privada e offline: os dados nunca saem do aparelho, não há
 
 **Existe hoje:**
 - Garagem com vários veículos e um veículo selecionado globalmente.
-- Abastecimentos com km/l por trecho e total gasto.
+- Abastecimentos com km/l por trecho e total gasto; o preço por litro ou o total pago (um calcula o outro) e a KM aceitam o formato brasileiro ("72.600", "40,5").
 - Leitura de recibo por foto: OCR local com Tesseract.js, que preenche data, litros, preço e posto para o usuário conferir.
 - Manutenções por data e KM, com previsão pelo ritmo de uso.
 - Dashboard com consumo, custo/km, gasto do mês, preço médio e gráficos.
@@ -58,7 +58,9 @@ Ferramenta pessoal, privada e offline: os dados nunca saem do aparelho, não há
 - **Compatibilidade:** precisa rodar em Safari/iOS mais antigos, então nada de APIs ou sintaxe recentes sem alternativa.
 - **Idioma:** pt-BR em toda a interface; números e moeda no formato brasileiro.
 
-**Lacuna em aberto:** "prestar contas / reembolso" é prioridade, mas ainda não há recurso para isso. Não existe marcação de veículo ou gasto como "trabalho", nem relatório por período, nem exportação em formato de planilha ou PDF. A forma de entregar isso não foi decidida.
+**Prestação de contas (existe):** aba Relatório com período (este mês, mês passado ou datas livres), totais de combustível e manutenção, lista de lançamentos, impressão/PDF em papel claro e planilha CSV. Um veículo pode ser marcado como **Trabalho** (tudo entra no relatório) ou, num veículo pessoal, **cada despesa** pode ser marcada como trabalho (na hora ou depois). Nos primeiros 10 dias do mês o relatório abre em "Mês passado". Decisões e limites: `.impeccable/surfaces/relatorio.md` e `.impeccable/surfaces/gasto-avulso.md`.
+
+**Limites conhecidos:** em veículo pessoal, os km rodados a trabalho não são registrados, então o relatório não calcula km nesse caso. A foto do recibo é lida e descartada (não é anexada ao relatório).
 
 **Terminologia:** Garagem (veículos), Abastecimento, Manutenção, KM (quilometragem), km/l, Posto.
 
@@ -77,7 +79,7 @@ Ferramenta pessoal, privada e offline: os dados nunca saem do aparelho, não há
 1. **Privado por padrão:** nada sai do aparelho; quando um recurso pedir nuvem, a resposta é outra solução local.
 2. **Registro no posto em segundos:** o fluxo de abastecimento é otimizado para celular, uma mão e pressa. Preencher automaticamente é bem-vindo, mas o usuário sempre confere antes de salvar.
 3. **Números confiáveis:** custo e consumo precisam bater com os recibos. Na dúvida, mostrar menos e certo, por exemplo deixar o posto vazio em vez de chutar.
-4. **Trabalho separado do pessoal:** o que é do carro de trabalho deve poder ser isolado para prestar contas.
+4. **Trabalho separado do pessoal:** o que é do carro de trabalho, ou a despesa avulsa de trabalho num carro pessoal, deve poder ser isolado para prestar contas.
 5. **Nunca perder dados:** desfazer, backup e validação vêm antes de recursos novos.
 
 ## Accessibility & Inclusion

@@ -5,7 +5,7 @@
  * Versão: incrementar ao mudar arquivos em CACHE_STATIC
  */
 
-const CACHE_VERSION = "v17";
+const CACHE_VERSION = "v23";
 const CACHE_NAME = `autogest-${CACHE_VERSION}`;
 const CACHE_STATIC = `autogest-static-${CACHE_VERSION}`;
 const CACHE_CDN = `autogest-cdn-${CACHE_VERSION}`;
@@ -32,7 +32,8 @@ const STATIC_ASSETS = [
   "/assets/icons/icon-384.png",
   "/assets/icons/icon-512.png",
   "/assets/icons/icon.svg",
-  "/assets/fonts/inter-latin-var.woff2",
+  "/assets/fonts/instrument-sans-latin-var.woff2",
+  "/assets/fonts/nunito-latin-var.woff2",
 ];
 
 // Instalação: pré-cache dos assets estáticos

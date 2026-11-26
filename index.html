@@ -12,7 +12,7 @@
       content="Sistema offline-first para monitorar consumo, abastecimentos e manutenções de veículos. Dashboard com km/l, gráficos e alertas de manutenção."
     />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#3B82F6" />
+    <meta name="theme-color" content="#0b0c0e" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
@@ -34,10 +34,17 @@
       href="/assets/icons/icon-512.png"
     />
     <link rel="apple-touch-icon" href="/assets/icons/icon-192.png" />
-    <link rel="mask-icon" href="/assets/icons/icon.svg" color="#3B82F6" />
+    <link rel="mask-icon" href="/assets/icons/icon.svg" color="#3b82f6" />
     <link
       rel="preload"
-      href="/assets/fonts/inter-latin-var.woff2"
+      href="/assets/fonts/instrument-sans-latin-var.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/assets/fonts/nunito-latin-var.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -101,9 +108,7 @@
   ═══════════════════════════════════════════ -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar__brand">
-        <span class="brand-icon" aria-hidden="true"
-          ><svg class="i"><use href="#i-bolt" /></svg
-        ></span>
+        <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">AutoGest</span>
       </div>
 
@@ -153,7 +158,7 @@
               <path d="M16 5l3 4" />
             </svg>
           </span>
-          <span class="nav-label">Abastecimento</span>
+          <span class="nav-label">Abastecer</span>
         </button>
 
         <button class="nav-item" data-screen="maintenance">
@@ -191,7 +196,7 @@
       </nav>
 
       <div class="sidebar__footer">
-        <span class="sidebar-version">v1.0.0</span>
+        <span class="sidebar-version">v2.0.0</span>
       </div>
     </aside>
 
@@ -280,56 +285,103 @@
           <!-- ─── SCREEN: DASHBOARD ─────────────────── -->
           <section class="screen active" id="screen-dashboard">
             <!-- Empty state -->
-            <div class="empty-state" id="dashEmptyState" style="display: none">
-              <div class="empty-icon">🚗</div>
-              <h2>Nenhum veículo cadastrado</h2>
-              <p>
-                Adicione seu primeiro veículo para começar a monitorar consumo e
-                manutenções.
+            <div class="onboarding" id="dashEmptyState" style="display: none">
+              <h2 class="onboarding__title">
+                Seu caderno de bordo <em>começa aqui.</em>
+              </h2>
+              <p class="onboarding__lede">
+                Anote cada abastecimento e cada revisão. O AutoGest faz as
+                contas: consumo, custo por km e o que vence a seguir.
               </p>
-              <button class="btn btn--primary" data-screen="garage">
-                Adicionar veículo
+              <ol class="onboarding__steps">
+                <li>
+                  <strong>Cadastre o veículo</strong>
+                  <span>com o modelo e a KM atual do painel.</span>
+                </li>
+                <li>
+                  <strong>Registre os abastecimentos</strong>
+                  <span>digitando ou pela foto do recibo.</span>
+                </li>
+                <li>
+                  <strong>Agende as manutenções</strong>
+                  <span>por data ou por quilometragem.</span>
+                </li>
+              </ol>
+              <button class="btn btn--primary btn--lg" data-screen="garage">
+                Cadastrar meu veículo
               </button>
             </div>
 
             <!-- Dashboard content -->
             <div id="dashContent">
-              <!-- KPI row -->
-              <div class="kpi-row">
-                <div class="kpi-card kpi-card--highlight">
-                  <span class="kpi-label">Consumo médio</span>
-                  <div class="kpi-value" id="kpiAvgKml">
+              <!-- O que precisa de atenção vem antes de tudo (some quando está tudo em dia) -->
+              <button
+                type="button"
+                class="dash-alert"
+                id="dashAlert"
+                data-screen="maintenance"
+                hidden
+              >
+                <span class="dash-alert__dot" aria-hidden="true"></span>
+                <span class="dash-alert__text" id="dashAlertText"></span>
+                <span class="dash-alert__go">Ver agenda</span>
+              </button>
+
+              <!-- Abertura: a frase do caderno + o livro-razão -->
+              <div class="dash-top">
+                <section class="dash-hero" aria-labelledby="dashHeroLede">
+                  <p class="dash-hero__lede" id="dashHeroLede">
+                    <span id="dashCarName">Seu veículo</span> faz em média
+                  </p>
+                  <p class="dash-hero__figure" id="kpiAvgKml">
                     — <span class="kpi-unit">km/l</span>
+                  </p>
+                  <p class="dash-hero__sub" id="kpiRefills">—</p>
+                  <details class="how-calc">
+                    <summary>Como calculamos</summary>
+                    <p>
+                      Consumo = km rodados ÷ litros, entre dois abastecimentos
+                      seguidos. Supõe que o tanque foi enchido por completo em
+                      cada um. As previsões em dias usam o seu ritmo médio de
+                      km por dia.
+                    </p>
+                  </details>
+                </section>
+
+                <dl class="ledger" aria-label="Resumo do veículo">
+                  <div class="ledger__row">
+                    <dt><span class="ledger__label">Última KM</span></dt>
+                    <dd id="kpiLastOdo">—</dd>
                   </div>
-                  <span class="kpi-sub" id="kpiRefills"
-                    >— abastecimentos registrados</span
-                  >
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Última KM</span>
-                  <div class="kpi-value kpi-value--sm" id="kpiLastOdo">—</div>
-                  <span class="kpi-sub">km</span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Último abastec.</span>
-                  <div class="kpi-value kpi-value--sm" id="kpiLastFuel">—</div>
-                  <span class="kpi-sub" id="kpiLastDate">—</span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Custo por km</span>
-                  <div class="kpi-value kpi-value--sm" id="kpiCostKm">—</div>
-                  <span class="kpi-sub" id="kpiCostKmSub">só combustível</span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Gasto no mês</span>
-                  <div class="kpi-value kpi-value--sm" id="kpiMonthSpend">—</div>
-                  <span class="kpi-sub" id="kpiMonthSub">—</span>
-                </div>
-                <div class="kpi-card">
-                  <span class="kpi-label">Preço médio do litro</span>
-                  <div class="kpi-value kpi-value--sm" id="kpiAvgPrice">—</div>
-                  <span class="kpi-sub" id="kpiAvgPriceSub">—</span>
-                </div>
+                  <div class="ledger__row">
+                    <dt>
+                      <span class="ledger__label">Último abastecimento</span>
+                      <small id="kpiLastDate">—</small>
+                    </dt>
+                    <dd id="kpiLastFuel">—</dd>
+                  </div>
+                  <div class="ledger__row">
+                    <dt>
+                      <span class="ledger__label">Custo por km</span>
+                      <small id="kpiCostKmSub">só combustível</small>
+                    </dt>
+                    <dd id="kpiCostKm">—</dd>
+                  </div>
+                  <div class="ledger__row">
+                    <dt>
+                      <span class="ledger__label">Gasto no mês</span>
+                      <small id="kpiMonthSub">—</small>
+                    </dt>
+                    <dd id="kpiMonthSpend">—</dd>
+                  </div>
+                  <div class="ledger__row">
+                    <dt>
+                      <span class="ledger__label">Preço médio do litro</span>
+                      <small id="kpiAvgPriceSub">—</small>
+                    </dt>
+                    <dd id="kpiAvgPrice">—</dd>
+                  </div>
+                </dl>
               </div>
 
               <div class="dash-columns">
@@ -378,6 +430,7 @@
                     <button
                       class="btn btn--ghost btn--sm"
                       data-screen="maintenance"
+                      data-open="btnShowMaintForm"
                     >
                       + Nova
                     </button>
@@ -386,7 +439,7 @@
                     <div class="maint-empty" id="maintEmpty">
                       <p>
                         Nenhuma manutenção agendada.
-                        <button class="link-btn" data-screen="maintenance">
+                        <button class="link-btn" data-screen="maintenance" data-open="btnShowMaintForm">
                           Agendar agora
                         </button>
                       </p>
@@ -424,7 +477,7 @@
                   <input
                     type="text"
                     id="carName"
-                    placeholder="Ex: Civic do trabalho"
+                    placeholder="Ex.: Civic do trabalho"
                     maxlength="40"
                   />
                 </div>
@@ -433,7 +486,7 @@
                   <input
                     type="text"
                     id="carModel"
-                    placeholder="Ex: Honda Civic EXL"
+                    placeholder="Ex.: Honda Civic EXL"
                     maxlength="50"
                   />
                 </div>
@@ -442,9 +495,8 @@
                   <input
                     type="number"
                     id="carYear"
-                    placeholder="2022"
-                    min="1950"
-                    max="2030"
+                    placeholder="Ex.: 2022"
+                    inputmode="numeric"
                   />
                 </div>
                 <div class="field">
@@ -452,7 +504,7 @@
                   <input
                     type="text"
                     id="carPlate"
-                    placeholder="ABC-1234"
+                    placeholder="Ex.: ABC1D23"
                     maxlength="8"
                     style="text-transform: uppercase"
                   />
@@ -470,10 +522,11 @@
                 <div class="field">
                   <label for="carOdo">KM atual</label>
                   <input
-                    type="number"
+                    type="text"
                     id="carOdo"
-                    placeholder="45000"
-                    min="0"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="Ex.: 45000"
                   />
                 </div>
                 <div class="field">
@@ -500,7 +553,6 @@
             <!-- Car list -->
             <div class="car-list" id="carList">
               <div class="empty-state empty-state--sm" id="carEmptyState">
-                <div class="empty-icon">🏎️</div>
                 <p>Nenhum veículo cadastrado ainda.</p>
               </div>
             </div>
@@ -535,19 +587,7 @@
           <section class="screen" id="screen-fuel">
             <div class="section-header section-header--top">
               <h2>Registrar abastecimento</h2>
-              <button class="btn btn--ghost btn--sm" id="btnScanReceipt">
-                <svg class="i" aria-hidden="true"><use href="#i-camera" /></svg>
-                <span id="btnScanReceiptLabel">Ler recibo</span>
-              </button>
-              <input
-                type="file"
-                id="receiptFile"
-                accept="image/*"
-                capture="environment"
-                hidden
-              />
             </div>
-            <p class="ocr-status" id="ocrStatus" role="status" aria-live="polite" hidden></p>
 
             <div class="no-car-warn" id="fuelNoCar" style="display: none">
               <p><svg class="i" aria-hidden="true"><use href="#i-alert" /></svg> Cadastre um veículo antes de registrar abastecimentos.</p>
@@ -559,48 +599,87 @@
             <div id="fuelFormWrap">
               <div class="form-card">
                 <div class="fuel-car-context" id="fuelCarContext"></div>
+
+                <!-- Atalho principal no posto: a foto do recibo preenche o resto -->
+                <button type="button" class="btn btn--ghost btn--lg receipt-cta" id="btnScanReceipt">
+                  <svg class="i" aria-hidden="true"><use href="#i-camera" /></svg>
+                  <span id="btnScanReceiptLabel">Ler recibo</span>
+                </button>
+                <input
+                  type="file"
+                  id="receiptFile"
+                  accept="image/*"
+                  capture="environment"
+                  hidden
+                />
+                <p class="ocr-status" id="ocrStatus" role="status" aria-live="polite" hidden></p>
+
                 <div class="form-grid">
                   <div class="field field--full">
                     <label for="fuelDate">Data</label>
                     <input type="date" id="fuelDate" />
                   </div>
-                  <div class="field">
+                  <div class="field field--full">
                     <label for="fuelOdo">KM atual</label>
                     <input
-                      type="number"
+                      type="text"
                       id="fuelOdo"
-                      placeholder="48500"
-                      min="0"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      placeholder="Ex.: 48500"
+                      aria-describedby="fuelOdoHint"
                     />
+                    <small class="field-hint" id="fuelOdoHint"></small>
                   </div>
                   <div class="field">
                     <label for="fuelLiters">Litros</label>
                     <input
-                      type="number"
+                      type="text"
                       id="fuelLiters"
-                      placeholder="40.5"
-                      min="0"
-                      step="any"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      placeholder="Ex.: 40,5"
                     />
                   </div>
                   <div class="field">
                     <label for="fuelPrice">Preço/litro (R$)</label>
                     <input
-                      type="number"
+                      type="text"
                       id="fuelPrice"
-                      placeholder="5.89"
-                      min="0"
-                      step="any"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      placeholder="Ex.: 5,89"
                     />
                   </div>
-                  <div class="field">
+                  <div class="field field--full">
+                    <label for="fuelTotal">
+                      Total pago (R$)
+                      <span class="label-optional">(no lugar do preço/litro)</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="fuelTotal"
+                      inputmode="decimal"
+                      autocomplete="off"
+                      placeholder="Ex.: 238,50"
+                    />
+                  </div>
+                  <div class="field field--full">
                     <label for="fuelStation">Posto (opcional)</label>
                     <input
                       type="text"
                       id="fuelStation"
-                      placeholder="Posto Ipiranga"
+                      placeholder="Ex.: Posto Ipiranga"
                       maxlength="60"
                     />
+                    <div class="quick-fill" id="fuelQuick" hidden></div>
+                  </div>
+                  <div class="field field--full" id="fuelWorkField" hidden>
+                    <label class="check">
+                      <input type="checkbox" id="fuelWork" />
+                      <span>Despesa de trabalho</span>
+                    </label>
+                    <small class="field-hint">Entra no relatório de reembolso, mesmo neste carro pessoal.</small>
                   </div>
                 </div>
 
@@ -617,6 +696,10 @@
                   <div class="calc-row">
                     <span>Consumo este trecho</span>
                     <strong id="calcKml">— km/l</strong>
+                  </div>
+                  <div class="calc-row">
+                    <span>Preço por litro</span>
+                    <strong id="calcPrice">—</strong>
                   </div>
                   <div class="calc-row">
                     <span>Total gasto</span>
@@ -651,7 +734,7 @@
           <!-- ─── SCREEN: MANUTENÇÃO ────────────────── -->
           <section class="screen" id="screen-maintenance">
             <div class="section-header section-header--top">
-              <h2>Manutenções</h2>
+              <h2>Agenda</h2>
               <button class="btn btn--primary btn--sm" id="btnShowMaintForm">
                 + Agendar
               </button>
@@ -709,10 +792,11 @@
                 <div class="field">
                   <label for="maintKm">KM prevista (opcional)</label>
                   <input
-                    type="number"
+                    type="text"
                     id="maintKm"
-                    placeholder="50000"
-                    min="0"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="Ex.: 50000"
                   />
                 </div>
                 <div class="field field--full">
@@ -720,8 +804,15 @@
                   <textarea
                     id="maintNotes"
                     rows="2"
-                    placeholder="Notas adicionais..."
+                    placeholder="Ex.: usar óleo 5W30"
                   ></textarea>
+                </div>
+                <div class="field field--full" id="maintWorkField" hidden>
+                  <label class="check">
+                    <input type="checkbox" id="maintWork" />
+                    <span>Despesa de trabalho</span>
+                  </label>
+                  <small class="field-hint">Entra no relatório de reembolso, mesmo neste carro pessoal.</small>
                 </div>
               </div>
               <div class="form-actions">
@@ -734,11 +825,17 @@
               </div>
             </div>
 
-            <!-- Maintenance list -->
-            <div id="maintList">
-              <div class="empty-state empty-state--sm" id="maintListEmpty">
-                <p>Nenhuma manutenção agendada para este veículo.</p>
+            <!-- Maintenance list + resumo (o resumo só aparece em telas largas) -->
+            <div class="maint-layout">
+              <div id="maintList">
+                <div class="empty-state empty-state--sm" id="maintListEmpty">
+                  <p>Nenhuma manutenção agendada para este veículo.</p>
+                </div>
               </div>
+              <aside class="maint-summary" id="maintSummary" aria-label="Resumo da agenda" hidden>
+                <h3>Resumo</h3>
+                <dl class="ledger" id="maintSummaryList"></dl>
+              </aside>
             </div>
           </section>
 
@@ -758,13 +855,14 @@
 
             <!-- Sem veículo de trabalho -->
             <div class="empty-state" id="reportEmpty" style="display: none">
-              <h2>Nenhum veículo de trabalho</h2>
+              <h2>Nada marcado como trabalho</h2>
               <p>
-                Marque um veículo como <strong>Trabalho</strong> na Garagem para
-                montar o relatório de reembolso.
+                Marque um veículo como <strong>Trabalho</strong> na Garagem, ou
+                marque despesas avulsas como <strong>Trabalho</strong> no
+                Abastecer e na Manutenção.
               </p>
-              <button class="btn btn--primary" data-screen="garage">
-                Ir para Garagem
+              <button class="btn btn--primary" data-screen="garage" data-hint=".car-work-toggle">
+                Ver meus veículos
               </button>
             </div>
 
@@ -920,7 +1018,7 @@
           <path d="M3 22V9l4-7h10l4 7v13H3z" />
           <path d="M3 13h18" />
         </svg>
-        <span>Abastec.</span>
+        <span>Abastecer</span>
       </button>
       <button class="bnav-item" data-screen="maintenance">
         <svg
@@ -970,6 +1068,7 @@
       >
         <h2 id="modalTitle">Confirmar ação</h2>
         <p id="modalMessage">Tem certeza?</p>
+        <button type="button" class="link-btn modal-extra" id="modalExtra" hidden></button>
         <div class="modal-actions">
           <button class="btn btn--ghost" id="modalCancel">Cancelar</button>
           <button class="btn btn--danger" id="modalConfirm">Confirmar</button>

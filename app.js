@@ -125,6 +125,11 @@ function icon(name) {
 
 // Escapa texto do usuário antes de interpolar em innerHTML (evita XSS)
 const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+// Texto do usuário seguro para innerHTML, com quebra permitida depois de "/"
+// ("Alinhamento/Balanceamento" quebra na barra, não no meio da palavra)
+function breakable(value) {
+  return esc(value).replace(/\//g, "/<wbr>");
+}
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (ch) => ESC_MAP[ch]);
 }
@@ -145,7 +150,9 @@ function carEmoji(fuel) {
 /**
  * @param {object} [action] botão opcional no toast, ex.: { label: "Desfazer", onClick }
  */
-function showToast(msg, type = "success", duration = 3000, action = null) {
+function showToast(msg, type = "success", duration = null, action = null) {
+  // Erros ficam mais tempo: dá para ler e agir (WCAG 2.2.1)
+  if (duration == null) duration = type === "error" ? 6000 : 3500;
   const container = document.getElementById("toastContainer");
   const t = document.createElement("div");
   t.className = `toast toast--${type}`;
@@ -157,12 +164,33 @@ function showToast(msg, type = "success", duration = 3000, action = null) {
   const close = () => {
     if (closed) return;
     closed = true;
-    t.style.animation = prefersReducedMotion()
-      ? "fadeOut .2s ease forwards"
-      : "slideOut .25s ease forwards";
-    t.addEventListener("animationend", () => t.remove());
-    setTimeout(() => t.remove(), 400); // garante remoção mesmo sem animação
+    clearTimeout(timer);
+    t.classList.add("is-leaving"); // CSS: transição de saída, mais curta que a entrada
+    t.addEventListener("transitionend", () => t.remove(), { once: true });
+    setTimeout(() => t.remove(), 300); // garante remoção mesmo sem transição
   };
+
+  // O tempo para enquanto o mouse ou o foco estão no aviso, e retoma depois
+  let remaining = duration;
+  let startedAt = Date.now();
+  let paused = false;
+  let timer = setTimeout(close, remaining);
+  const pause = () => {
+    if (paused || closed) return;
+    paused = true;
+    clearTimeout(timer);
+    remaining -= Date.now() - startedAt;
+  };
+  const resume = () => {
+    if (!paused || closed) return;
+    paused = false;
+    startedAt = Date.now();
+    timer = setTimeout(close, Math.max(remaining, 1500));
+  };
+  t.addEventListener("pointerenter", pause);
+  t.addEventListener("pointerleave", resume);
+  t.addEventListener("focusin", pause);
+  t.addEventListener("focusout", resume);
 
   if (action) {
     const btn = document.createElement("button");
@@ -177,7 +205,6 @@ function showToast(msg, type = "success", duration = 3000, action = null) {
   }
 
   container.appendChild(t);
-  setTimeout(close, duration);
 }
 
 /* ═══════════════════════════════
@@ -240,9 +267,44 @@ function clearFormErrors(root) {
   root.querySelectorAll('[aria-invalid="true"]').forEach(clearFieldError);
 }
 
+/* Momentos assinatura: marca uma linha recém-alterada por um instante.
+   Raro (poucas vezes por mês), por isso pode ter um pouco de encanto. */
+function markRow(listSelector, id, className, ms) {
+  const row = [...document.querySelectorAll(`${listSelector} [data-id]`)].find(
+    (el) => el.dataset.id === id,
+  );
+  if (!row) return;
+  row.classList.add(className);
+  setTimeout(() => row.classList.remove(className), ms);
+}
+
+/* ═══════════════════════════════
+   NÚMEROS DIGITADOS (pt-BR)
+   A pessoa digita "40,5", "1.234,56" ou "40.5"; null = vazio ou inválido.
+═══════════════════════════════ */
+function readDecimal(id) {
+  const raw = document.getElementById(id).value.replace(/R\$|\s/g, "");
+  if (raw === "") return { raw, value: null, invalid: false };
+  if (!/^\d+([.,]\d+)*$|^\d*[.,]\d+$/.test(raw)) return { raw, value: null, invalid: true };
+  // Com vírgula: pontos são milhar. Sem vírgula: ponto é decimal ("40.123").
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const value = Number(normalized);
+  return Number.isFinite(value) ? { raw, value, invalid: false } : { raw, value: null, invalid: true };
+}
+// Inteiro com pontos de milhar opcionais ("72.600" ou "72600")
+function readInteger(id) {
+  const raw = document.getElementById(id).value.replace(/\s/g, "");
+  if (raw === "") return { raw, value: null, invalid: false };
+  if (!/^\d{1,3}(\.\d{3})+$|^\d+$/.test(raw)) return { raw, value: null, invalid: true };
+  return { raw, value: parseInt(raw.replace(/\./g, ""), 10), invalid: false };
+}
+// Número no campo, no formato brasileiro ("40,5")
+const toField = (n, dec = 2) =>
+  Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: dec, useGrouping: false });
+
 // Exclusão com "Desfazer": `restore` recoloca os dados como estavam
-function showUndoToast(msg, restore) {
-  showToast(msg, "info", 6000, {
+function showUndoToast(msg, restore, duration = 6000) {
+  showToast(msg, "info", duration, {
     label: "Desfazer",
     onClick: () => {
       restore();
@@ -265,17 +327,30 @@ const modalOverlay = document.getElementById("modalOverlay");
 const modalCancel = document.getElementById("modalCancel");
 const modalConfirm = document.getElementById("modalConfirm");
 
-function showConfirm(title, message, cb) {
+/**
+ * @param {object} [opts] { confirmLabel: texto do botão perigoso, extra: { label, onClick } }
+ */
+function showConfirm(title, message, cb, opts = {}) {
   document.getElementById("modalTitle").textContent = title;
   document.getElementById("modalMessage").textContent = message;
+  modalConfirm.textContent = opts.confirmLabel || "Confirmar";
+  const extra = document.getElementById("modalExtra");
+  extra.hidden = !opts.extra;
+  extra.textContent = opts.extra ? opts.extra.label : "";
+  extra.onclick = opts.extra ? opts.extra.onClick : null;
   _confirmReturnFocus = document.activeElement;
+  clearTimeout(modalHideTimer);
   modalOverlay.style.display = "flex";
+  modalOverlay.getBoundingClientRect(); // garante o estado inicial antes da transição
+  modalOverlay.classList.add("is-open");
   _confirmCb = cb;
   modalCancel.focus();
 }
+let modalHideTimer = null;
 
 function closeConfirm(confirmed) {
-  modalOverlay.style.display = "none";
+  modalOverlay.classList.remove("is-open");
+  modalHideTimer = setTimeout(() => (modalOverlay.style.display = "none"), 160);
   const cb = _confirmCb;
   _confirmCb = null;
   // Devolve o foco antes do callback (que pode redesenhar a lista e remover o botão)
@@ -389,7 +464,20 @@ function renderCurrentScreen() {
 // Wire nav buttons (delegated)
 document.body.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-screen]");
-  if (btn) navigateTo(btn.dataset.screen);
+  if (!btn) return;
+  navigateTo(btn.dataset.screen);
+  // data-open="id": depois de trocar de tela, aciona esse botão (ex.: "+ Nova" abre o formulário)
+  if (btn.dataset.open) document.getElementById(btn.dataset.open)?.click();
+  // data-hint="seletor": destaca por alguns segundos o controle que a pessoa veio procurar
+  if (btn.dataset.hint) {
+    const target = document.querySelector(btn.dataset.hint);
+    if (target) {
+      target.scrollIntoView({ block: "center" });
+      target.focus({ preventScroll: true });
+      document.querySelectorAll(btn.dataset.hint).forEach((el) => el.classList.add("is-hint"));
+      setTimeout(() => document.querySelectorAll(".is-hint").forEach((el) => el.classList.remove("is-hint")), 3500);
+    }
+  }
 });
 
 /* ═══════════════════════════════
@@ -518,7 +606,10 @@ function chartTheme() {
   return {
     accent: v("--accent-blue"),
     accentSoft: v("--chart-fill"),
+    bar: v("--chart-bar"),
+    line: v("--chart-line"),
     grid: v("--chart-grid"),
+    font: v("--font") || "system-ui",
     tick: v("--text-muted"),
     tooltipBg: v("--bg-raised"),
     tooltipBorder: v("--border-light"),
@@ -527,12 +618,22 @@ function chartTheme() {
   };
 }
 
+/* Gráfico é dado funcional visto todo dia: anima só na primeira vez que
+   aparece na sessão (explica a leitura); depois, desenha direto. */
+let chartsHaveAnimated = false;
+function chartAnimation() {
+  if (prefersReducedMotion() || chartsHaveAnimated) return false;
+  return { duration: 700, easing: "easeOutQuart" };
+}
+
 function baseChartOptions(t, formatValue) {
+  const font = { family: t.font, size: 11 };
   return {
     responsive: true,
     maintainAspectRatio: false,
-    animation: prefersReducedMotion() ? false : undefined,
+    animation: chartAnimation(),
     interaction: { mode: "index", intersect: false },
+    layout: { padding: { top: 6 } },
     plugins: {
       legend: { display: false },
       tooltip: {
@@ -541,18 +642,26 @@ function baseChartOptions(t, formatValue) {
         borderWidth: 1,
         titleColor: t.tooltipTitle,
         bodyColor: t.tooltipBody,
-        callbacks: { label: (ctx) => ` ${formatValue(ctx.parsed.y)}` },
+        titleFont: { family: t.font, size: 11, weight: "500" },
+        bodyFont: { family: t.font, size: 13, weight: "600" },
+        padding: 10,
+        cornerRadius: 8,
+        displayColors: false,
+        callbacks: { label: (ctx) => formatValue(ctx.parsed.y) },
       },
     },
     scales: {
       x: {
-        ticks: { color: t.tick, font: { size: 10 }, maxTicksLimit: 6 },
-        grid: { color: t.grid },
+        ticks: { color: t.tick, font, maxTicksLimit: 6, maxRotation: 0 },
+        grid: { display: false },
+        border: { display: false },
       },
       y: {
         beginAtZero: false,
-        ticks: { color: t.tick, font: { size: 10 } },
-        grid: { color: t.grid },
+        grace: "8%",
+        ticks: { color: t.tick, font, maxTicksLimit: 4, padding: 8 },
+        grid: { color: t.grid, drawTicks: false },
+        border: { display: false },
       },
     },
   };
@@ -674,18 +783,24 @@ function drawConsumoChart(Chart, canvas, { labels, data }, t) {
         {
           label: "km/l",
           data,
-          borderColor: t.accent,
+          // A linha é neutra; só o último ponto (o "agora") leva o destaque
+          borderColor: t.line,
           backgroundColor: t.accentSoft,
           borderWidth: 2,
-          pointRadius: 4,
-          pointBackgroundColor: t.accent,
+          // Só o último ponto aparece: é o "agora" da série
+          pointRadius: data.map((_, i) => (i === data.length - 1 ? 4 : 0)),
+          pointHoverRadius: 5,
+          pointBackgroundColor: data.map((_, i) => (i === data.length - 1 ? t.accent : t.line)),
+          pointHoverBackgroundColor: t.accent,
+          pointBorderWidth: 0,
           tension: 0.35,
           fill: true,
         },
       ],
     },
-    options: baseChartOptions(t, (v) => `${v} km/l`),
+    options: baseChartOptions(t, (v) => `${fmt(v)} km/l`),
   });
+  chartsHaveAnimated = true;
 }
 
 function drawSpendChart(Chart, canvas, { labels, data }, t) {
@@ -701,14 +816,18 @@ function drawSpendChart(Chart, canvas, { labels, data }, t) {
         {
           label: "Gasto",
           data,
-          backgroundColor: t.accent,
-          borderRadius: 4,
-          maxBarThickness: 36,
+          // Meses anteriores em tom neutro; o mês mais recente com o marca-texto
+          backgroundColor: data.map((_, i) => (i === data.length - 1 ? t.accent : t.bar)),
+          hoverBackgroundColor: data.map((_, i) => (i === data.length - 1 ? t.accent : t.tooltipBorder)),
+          borderRadius: 6,
+          borderSkipped: false,
+          maxBarThickness: 30,
         },
       ],
     },
     options,
   });
+  chartsHaveAnimated = true;
 }
 
 /* ═══════════════════════════════
@@ -755,6 +874,18 @@ function calcFuelCosts(sorted) {
 /* ═══════════════════════════════
    DASHBOARD RENDER
 ═══════════════════════════════ */
+/* A primeira vez que o dashboard aparece na sessão, o número herói é
+   "escrito" da esquerda para a direita. Depois, aparece direto: o dashboard
+   é aberto várias vezes por dia e a repetição cansaria. */
+let heroWritten = false;
+function writeHeroOnce() {
+  if (heroWritten || prefersReducedMotion()) return;
+  heroWritten = true;
+  const hero = document.querySelector(".dash-hero");
+  hero.classList.add("is-writing");
+  hero.addEventListener("animationend", () => hero.classList.remove("is-writing"), { once: true });
+}
+
 function renderDashboard() {
   const cars = DB.getCars();
   const emptyState = document.getElementById("dashEmptyState");
@@ -777,22 +908,25 @@ function renderDashboard() {
   const maints = DB.getMaintsForCar(car.id);
   const setText = (id, text) => (document.getElementById(id).textContent = text);
 
+  const lastFuel = fuels[fuels.length - 1];
   // KPIs
   const avg = calcAvgKml(fuels);
   document.getElementById("kpiAvgKml").innerHTML =
     avg !== null
       ? `${fmt(avg)} <span class="kpi-unit">km/l</span>`
       : `— <span class="kpi-unit">km/l</span>`;
+  setText("dashCarName", car.name);
   setText(
     "kpiRefills",
-    `${fuels.length} abastecimento${fuels.length !== 1 ? "s" : ""} registrado${fuels.length !== 1 ? "s" : ""}`,
+    avg !== null
+      ? `calculado em ${fuels.length} abastecimentos` +
+          (lastFuel && daysFromToday(lastFuel.date) < -60 ? ` · o último foi ${timeAgo(lastFuel.date)}` : "")
+      : "Registre 2 abastecimentos para calcular o consumo.",
   );
+  writeHeroOnce();
 
-  const lastFuel = fuels[fuels.length - 1];
-  setText(
-    "kpiLastOdo",
-    (lastFuel ? lastFuel.odometer : car.odometer).toLocaleString("pt-BR"),
-  );
+  const lastKm = lastFuel ? lastFuel.odometer : car.odometer;
+  setText("kpiLastOdo", lastKm ? `${lastKm.toLocaleString("pt-BR")} km` : "—");
   setText("kpiLastFuel", lastFuel ? `${fmt(lastFuel.liters, 1)} L` : "—");
   setText("kpiLastDate", lastFuel ? fmtDate(lastFuel.date) : "—");
 
@@ -802,10 +936,15 @@ function renderDashboard() {
     "kpiCostKmSub",
     costs.costPerKm !== null ? "só combustível" : "precisa de 2 abastecimentos com preço",
   );
-  setText("kpiMonthSpend", fmtMoney(costs.monthSpend));
+  // Sem abastecimento no mês, "R$ 0,00" parece erro: mostra o traço e diz o porquê
+  setText("kpiMonthSpend", costs.monthRefills ? fmtMoney(costs.monthSpend) : "—");
   setText(
     "kpiMonthSub",
-    `${costs.monthRefills} abastecimento${costs.monthRefills !== 1 ? "s" : ""} este mês`,
+    costs.monthRefills
+      ? `${costs.monthRefills} abastecimento${costs.monthRefills !== 1 ? "s" : ""} este mês`
+      : lastFuel
+        ? `nenhum este mês · o último foi ${timeAgo(lastFuel.date)}`
+        : "nenhum abastecimento ainda",
   );
   setText("kpiAvgPrice", costs.avgPrice !== null ? fmtMoney(costs.avgPrice) : "—");
   setText(
@@ -856,9 +995,80 @@ function maintKmStatus(m, usage) {
   return { overdue: false, soon: remaining <= 1000, text };
 }
 
+/* ── Estado de uma manutenção: UMA função para o app inteiro ──────────
+   Dashboard e Manutenções usam as mesmas palavras e a mesma cor.
+   level: urgent (vermelho) · upcoming (âmbar) · ok (menta) · done (cinza) */
+function daysFromToday(iso) {
+  const a = Date.parse(iso + "T00:00:00");
+  const b = Date.parse(today() + "T00:00:00");
+  return Math.round((a - b) / 864e5);
+}
+const pluralDias = (n) => `${n} ${n === 1 ? "dia" : "dias"}`;
+
+/** "há 15 meses", "ontem", "há 3 dias" */
+function timeAgo(iso) {
+  const days = -daysFromToday(iso);
+  if (days <= 0) return "hoje";
+  if (days === 1) return "ontem";
+  if (days < 30) return `há ${days} dias`;
+  const months = Math.max(1, Math.floor(days / 30.44));
+  if (months < 24) return `há ${months} ${months === 1 ? "mês" : "meses"}`;
+  return `há ${Math.floor(days / 365.25)} anos`;
+}
+
+function maintStatus(m, usage) {
+  if (m.resolved) {
+    const when = m.doneDate ? `Concluída em ${fmtDate(m.doneDate)}` : "Concluída";
+    const cost = m.cost !== null && m.cost !== undefined ? fmtMoney(m.cost) : "valor não informado";
+    return { level: "done", label: `${when} · ${cost}`, kmStatus: null };
+  }
+  const days = daysFromToday(m.date);
+  const kmStatus = maintKmStatus(m, usage);
+  let level = "ok";
+  let label = "Em dia";
+  if (days < 0) {
+    level = "urgent";
+    label = "Vencida";
+  } else if (days === 0) {
+    level = "urgent";
+    label = "Vence hoje";
+  } else if (days <= 7) {
+    level = "urgent";
+    label = `Vence em ${pluralDias(days)}`;
+  } else if (days <= 30) {
+    level = "upcoming";
+    label = `Em ${pluralDias(days)}`;
+  }
+  // A KM pode antecipar a urgência (ex.: troca de óleo por quilometragem)
+  if (kmStatus?.overdue && level !== "urgent") {
+    level = "urgent";
+    label = "KM atingida";
+  } else if (kmStatus?.soon && level === "ok") {
+    level = "upcoming";
+    label = "KM próxima";
+  }
+  return { level, label, kmStatus };
+}
+
 function renderDashboardMaint(maints, car, fuels = DB.getFuelsForCar(car.id)) {
   const grid = document.getElementById("maintenanceGrid");
   const empty = document.getElementById("maintEmpty");
+
+  // Faixa de atenção: a manutenção urgente é o fato mais acionável do dashboard
+  const alertEl = document.getElementById("dashAlert");
+  const usageAll = carUsage(car, fuels);
+  const urgent = maints
+    .filter((m) => !m.resolved)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((m) => ({ m, st: maintStatus(m, usageAll) }))
+    .filter((x) => x.st.level === "urgent");
+  alertEl.hidden = urgent.length === 0;
+  if (urgent.length) {
+    const more = urgent.length - 1;
+    document.getElementById("dashAlertText").textContent =
+      `${urgent[0].m.type} · ${urgent[0].st.label}` +
+      (more ? ` e mais ${more} ${more === 1 ? "urgente" : "urgentes"}` : "");
+  }
 
   // Filter only upcoming or near (not resolved) — sort by ISO date string (no new Date needed)
   const pending = maints
@@ -873,53 +1083,46 @@ function renderDashboardMaint(maints, car, fuels = DB.getFuelsForCar(car.id)) {
   }
   empty.style.display = "none";
 
-  const todayStr = today(); // "YYYY-MM-DD" local, comparável como string
-  const in7 = addDays(todayStr, 7);
-  const in30 = addDays(todayStr, 30);
   const usage = carUsage(car, fuels);
 
   const frag = document.createDocumentFragment();
   pending.forEach((m) => {
-    let cls = "maint-card--ok";
-    let status = "Em dia";
-    if (m.date < todayStr) {
-      cls = "maint-card--urgent";
-      status = "Vencida";
-    } else if (m.date <= in7) {
-      cls = "maint-card--urgent";
-      status = `Vence em ${daysUntil(m.date)}d`;
-    } else if (m.date <= in30) {
-      cls = "maint-card--upcoming";
-      status = `Em ${daysUntil(m.date)} dias`;
-    }
-
-    // A KM pode antecipar a urgência (ex.: troca de óleo por quilometragem)
-    const kmStatus = maintKmStatus(m, usage);
-    if (kmStatus?.overdue && cls !== "maint-card--urgent") {
-      cls = "maint-card--urgent";
-      status = "KM atingida";
-    } else if (kmStatus?.soon && cls === "maint-card--ok") {
-      cls = "maint-card--upcoming";
-      status = "KM próxima";
-    }
+    const { level, label, kmStatus } = maintStatus(m, usage);
+    const cls = `maint-card--${level}`;
+    const status = label;
 
     const card = document.createElement("div");
     card.className = `maint-card ${cls}`;
     card.innerHTML = `
       <div class="maint-card__stripe"></div>
-      <div class="maint-card__type">${esc(m.type)}</div>
+      <div class="maint-card__type">${breakable(m.type)}</div>
       <div class="maint-card__date">${icon("calendar")} ${fmtDate(m.date)}</div>
       ${
         kmStatus
           ? `<div class="maint-card__km">${icon("gauge")} ${parseInt(m.km).toLocaleString("pt-BR")} km · ${kmStatus.text}</div>`
           : ""
       }
-      <div class="maint-card__status">${status}</div>
+      <div class="maint-card__status">${esc(status)}</div>
+      <button type="button" class="icon-btn maint-card__done" data-action="dash-resolve" data-id="${esc(m.id)}" title="Marcar como feita" aria-label="Marcar ${esc(m.type)} como feita">${icon("check")}</button>
     `;
     frag.appendChild(card);
   });
   grid.replaceChildren(empty, frag);
 }
+
+// Do dashboard: concluir abre o formulário de valor e data, já no item certo
+document.getElementById("maintenanceGrid").addEventListener("click", (e) => {
+  const btn = e.target.closest('[data-action="dash-resolve"]');
+  if (!btn) return;
+  navigateTo("maintenance");
+  const item = [...document.querySelectorAll("#maintList .maint-list-item")].find(
+    (el) => el.dataset.id === btn.dataset.id,
+  );
+  if (item) {
+    openResolveForm(item, btn.dataset.id);
+    item.scrollIntoView({ block: "center" });
+  }
+});
 
 // Helpers for date string math (no new Date in hot path)
 function addDays(isoStr, days) {
@@ -964,12 +1167,15 @@ function renderGarageScreen() {
       <div class="car-card__info">
         <div class="car-card__name">${esc(car.name)}</div>
         <div class="car-card__sub">
-          ${esc(car.model)} · ${esc(car.year)} · <span class="car-pill">${esc(car.fuel)}</span>${car.usage === "trabalho" ? ` <span class="car-pill car-pill--work">Trabalho</span>` : ""}
+          ${esc(car.model)} · ${esc(car.year)} · <span class="car-pill">${esc(car.fuel)}</span>
           ${avg !== null ? `· <strong class="car-card__kml">${fmt(avg)} km/l</strong>` : ""}
+        </div>
+        <div class="row-tags">
+          <button type="button" class="chip-btn work-toggle car-work-toggle" data-action="togglework-car" data-id="${carId}" aria-pressed="${car.usage === "trabalho" ? "true" : "false"}" title="Todas as despesas deste veículo entram no relatório de reembolso">Veículo de trabalho</button>
         </div>
       </div>
       <div class="car-card__actions">
-        <button class="btn btn--ghost btn--sm" data-action="select" data-id="${carId}">Selecionar</button>
+        ${car.id === selectedId ? `<span class="car-pill car-pill--current">Em uso</span>` : `<button class="btn btn--ghost btn--sm" data-action="select" data-id="${carId}">Selecionar</button>`}
         <button class="icon-btn" data-action="edit" data-id="${carId}" title="Editar" aria-label="Editar">${icon("edit")}</button>
         <button class="icon-btn icon-btn--danger" data-action="delete" data-id="${carId}" title="Excluir" aria-label="Excluir">${icon("trash")}</button>
       </div>
@@ -1015,8 +1221,8 @@ document.getElementById("btnSaveCar").addEventListener("click", () => {
   const plate = document.getElementById("carPlate").value.trim().toUpperCase();
   const fuel = document.getElementById("carFuel").value;
   const usage = document.getElementById("carUsage").value === "trabalho" ? "trabalho" : "pessoal";
-  const odoRaw = document.getElementById("carOdo").value;
-  const odo = parseInt(odoRaw) || 0;
+  const odoField = readInteger("carOdo");
+  const odo = odoField.value || 0;
   const maxYear = new Date().getFullYear() + 1;
 
   const ok = validateFields([
@@ -1028,11 +1234,8 @@ document.getElementById("btnSaveCar").addEventListener("click", () => {
       test: () => year >= 1900 && year <= maxYear,
       message: `O ano deve estar entre 1900 e ${maxYear}.`,
     },
-    {
-      id: "carOdo",
-      test: () => odoRaw === "" || (Number(odoRaw) >= 0 && Number(odoRaw) <= 9999999),
-      message: "A KM deve ser um número positivo.",
-    },
+    { id: "carOdo", test: () => !odoField.invalid, message: "Use só números (ex.: 72000)." },
+    { id: "carOdo", test: () => odo <= 9999999, message: "A KM parece alta demais. Confira o número." },
   ]);
   if (!ok) return;
 
@@ -1087,6 +1290,23 @@ document.getElementById("carList").addEventListener("click", (e) => {
   if (!btn) return;
   const { action, id } = btn.dataset;
 
+  if (action === "togglework-car") {
+    const cars = DB.getCars();
+    const c = cars.find((x) => x.id === id);
+    if (!c) return;
+    c.usage = c.usage === "trabalho" ? "pessoal" : "trabalho";
+    DB.saveCars(cars);
+    invalidateCarScreens(); // inclui o Relatório
+    renderGarageScreen();
+    showToast(
+      c.usage === "trabalho"
+        ? `${c.name} entra no relatório de reembolso.`
+        : `${c.name} saiu do relatório de reembolso.`,
+      "info",
+    );
+    return;
+  }
+
   if (action === "select") {
     DB.setSelectedCar(id);
     carSel.value = id;
@@ -1114,9 +1334,14 @@ document.getElementById("carList").addEventListener("click", (e) => {
   }
 
   if (action === "delete") {
+    const target = DB.getCars().find((c) => c.id === id);
+    if (!target) return;
+    const nFuels = DB.getFuelsForCar(id).length;
+    const nMaints = DB.getMaintsForCar(id).length;
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
     showConfirm(
-      "Excluir veículo",
-      "Todos os dados de abastecimento e manutenção deste veículo também serão excluídos. Continuar?",
+      `Excluir ${target.name}?`,
+      `Apaga o veículo, ${plural(nFuels, "abastecimento", "abastecimentos")} e ${plural(nMaints, "manutenção", "manutenções")}. Você poderá desfazer por alguns segundos.`,
       () => {
         const before = {
           cars: DB.getCars(),
@@ -1136,13 +1361,21 @@ document.getElementById("carList").addEventListener("click", (e) => {
         rebuildCarSelector();
         invalidateCarScreens(); // marca telas dependentes como sujas
         renderGarageScreen();
-        showUndoToast("Veículo excluído.", () => {
-          DB.saveCars(before.cars);
-          DB.saveFuels(before.fuels);
-          DB.saveMaints(before.maints);
-          DB.setSelectedCar(before.selected);
-          rebuildCarSelector();
-        });
+        showUndoToast(
+          "Veículo excluído.",
+          () => {
+            DB.saveCars(before.cars);
+            DB.saveFuels(before.fuels);
+            DB.saveMaints(before.maints);
+            DB.setSelectedCar(before.selected);
+            rebuildCarSelector();
+          },
+          10000, // a ação mais destrutiva do app ganha mais tempo
+        );
+      },
+      {
+        confirmLabel: "Excluir veículo",
+        extra: { label: "Exportar backup antes", onClick: () => Backup.exportData() },
       },
     );
   }
@@ -1166,7 +1399,7 @@ function renderFuelScreen() {
 
   // Context header
   document.getElementById("fuelCarContext").innerHTML =
-    `${esc(car.emoji)} Abastecendo: <strong>${esc(car.name)}</strong> &mdash; ${esc(car.model)} ${esc(car.year)}`;
+    `Abastecendo <strong>${esc(car.name)}</strong> · ${esc(car.model)} ${esc(car.year)}`;
 
   // Set today's date
   document.getElementById("fuelDate").value =
@@ -1176,11 +1409,45 @@ function renderFuelScreen() {
   const fuels = DB.getFuelsForCar(car.id).sort(
     (a, b) => a.odometer - b.odometer,
   );
-  if (!document.getElementById("fuelOdo").value && fuels.length > 0) {
-    // Leave blank for user to enter current
+  // Referência de KM no campo: quem está no posto não precisa lembrar a última
+  const lastFuel = fuels[fuels.length - 1];
+  // Mesma referência da validação e do dashboard: o último abastecimento (ou a KM do cadastro, se não houver)
+  const lastKm = lastFuel ? lastFuel.odometer : car.odometer || 0;
+  const hint = document.getElementById("fuelOdoHint");
+  hint.textContent = lastKm ? `Último registro: ${lastKm.toLocaleString("pt-BR")} km` : "";
+  document.getElementById("fuelOdo").placeholder = lastKm
+    ? `Maior que ${lastKm.toLocaleString("pt-BR")}`
+    : "Ex.: 48500";
+
+  // "Repetir": um toque preenche o posto e o preço do último abastecimento
+  // "Despesa de trabalho" só faz sentido em veículo pessoal (no de trabalho, tudo conta)
+  document.getElementById("fuelWorkField").hidden = car.usage === "trabalho";
+  const quick = document.getElementById("fuelQuick");
+  const chips = [];
+  if (lastFuel && lastFuel.station) {
+    chips.push(`<button type="button" class="chip-btn" data-fill="fuelStation" data-value="${esc(lastFuel.station)}">${esc(lastFuel.station)}</button>`);
   }
+  if (lastFuel && lastFuel.price > 0) {
+    chips.push(`<button type="button" class="chip-btn" data-fill="fuelPrice" data-value="${esc(toField(lastFuel.price))}">${esc(fmtMoney(lastFuel.price))}/L</button>`);
+  }
+  quick.hidden = chips.length === 0;
+  quick.innerHTML = chips.length ? `<span>Repetir o último:</span>${chips.join("")}` : "";
 
   renderFuelHistory(car.id, fuels);
+}
+
+document.getElementById("fuelQuick").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-fill]");
+  if (!b) return;
+  const input = document.getElementById(b.dataset.fill);
+  input.value = b.dataset.value;
+  clearFieldError(input);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+/* Etiqueta que liga/desliga a marca "Trabalho" de um registro de veículo pessoal */
+function workToggle(kind, rec) {
+  return `<button type="button" class="chip-btn work-toggle" data-action="togglework-${kind}" data-id="${esc(rec.id)}" aria-pressed="${rec.work ? "true" : "false"}" title="Incluir no relatório de reembolso">Trabalho</button>`;
 }
 
 function renderFuelHistory(carId, fuels) {
@@ -1197,6 +1464,7 @@ function renderFuelHistory(carId, fuels) {
 
   const allSorted = [...fuels].sort((a, b) => a.odometer - b.odometer);
 
+  const personalCar = (DB.getCars().find((c) => c.id === carId) || {}).usage !== "trabalho";
   const frag = document.createDocumentFragment();
   sorted.forEach((f) => {
     const ascIdx = allSorted.findIndex((x) => x.id === f.id);
@@ -1205,6 +1473,7 @@ function renderFuelHistory(carId, fuels) {
 
     const item = document.createElement("div");
     item.className = "fuel-history-item";
+    item.dataset.id = f.id;
     item.innerHTML = `
       <div class="fuel-history-item__icon">${icon("fuel")}</div>
       <div class="fuel-history-item__info">
@@ -1216,6 +1485,7 @@ function renderFuelHistory(carId, fuels) {
           <span class="nowrap">${f.odometer.toLocaleString("pt-BR")} km</span>
           ${f.price ? ` · <span class="nowrap">${fmtMoney(f.price)}/L</span> · <span class="nowrap">Total: ${fmtMoney(f.liters * f.price)}</span>` : ""}
         </div>
+        ${personalCar ? `<div class="row-tags">${workToggle("fuel", f)}</div>` : ""}
       </div>
       <div class="fuel-history-item__kml">
         ${kml !== null ? `${fmt(kml)} <span>km/l</span>` : "<span>—</span>"}
@@ -1228,16 +1498,27 @@ function renderFuelHistory(carId, fuels) {
 }
 
 // Live calculation preview
+/** Preço/L e total a partir do que foi digitado: um calcula o outro. */
+function deriveFuelAmounts() {
+  const liters = readDecimal("fuelLiters").value;
+  let price = readDecimal("fuelPrice").value;
+  let total = readDecimal("fuelTotal").value;
+  if (liters > 0) {
+    if (price > 0 && !(total > 0)) total = Math.round(liters * price * 100) / 100;
+    else if (total > 0 && !(price > 0)) price = Math.round((total / liters) * 10000) / 10000; // 4 casas: o total fecha ao centavo
+  }
+  return { liters, price: price > 0 ? price : null, total: total > 0 ? total : null };
+}
+
 function updateCalcPreview() {
   const car = getSelectedCar();
   if (!car) return;
 
-  const odo = parseFloat(document.getElementById("fuelOdo").value);
-  const liters = parseFloat(document.getElementById("fuelLiters").value);
-  const price = parseFloat(document.getElementById("fuelPrice").value);
+  const odo = readInteger("fuelOdo").value;
+  const { liters, price, total } = deriveFuelAmounts();
   const preview = document.getElementById("calcPreview");
 
-  if (!odo || !liters) {
+  if (!odo || !(liters > 0)) {
     preview.style.display = "none";
     return;
   }
@@ -1255,11 +1536,11 @@ function updateCalcPreview() {
     kmDriv !== null ? `${kmDriv.toLocaleString("pt-BR")} km` : "—";
   document.getElementById("calcKml").textContent =
     kml !== null ? `${fmt(kml)} km/l` : "—";
-  document.getElementById("calcTotal").textContent =
-    price && liters ? fmtMoney(liters * price) : "—";
+  document.getElementById("calcPrice").textContent = price ? `${fmtMoney(price)}/L` : "—";
+  document.getElementById("calcTotal").textContent = total ? fmtMoney(total) : "—";
 }
 
-["fuelOdo", "fuelLiters", "fuelPrice"].forEach((id) => {
+["fuelOdo", "fuelLiters", "fuelPrice", "fuelTotal"].forEach((id) => {
   document.getElementById(id).addEventListener("input", updateCalcPreview);
 });
 
@@ -1271,47 +1552,72 @@ document.getElementById("btnSaveFuel").addEventListener("click", () => {
   }
 
   const date = document.getElementById("fuelDate").value;
-  const odo = parseInt(document.getElementById("fuelOdo").value);
-  const liters = parseFloat(document.getElementById("fuelLiters").value);
-  const price = parseFloat(document.getElementById("fuelPrice").value) || null;
+  const odoField = readInteger("fuelOdo");
+  const litersField = readDecimal("fuelLiters");
+  const priceField = readDecimal("fuelPrice");
+  const totalField = readDecimal("fuelTotal");
+  const odo = odoField.value;
+  const liters = litersField.value;
   const station = document.getElementById("fuelStation").value.trim();
 
   // KM tem que avançar em relação ao último abastecimento deste veículo
   const existingFuels = DB.getFuelsForCar(car.id);
   const lastOdo = Math.max(...existingFuels.map((f) => f.odometer), 0);
-  const priceRaw = document.getElementById("fuelPrice").value;
+
+  const amounts = deriveFuelAmounts();
+  const bothGiven = priceField.value > 0 && totalField.value > 0 && liters > 0;
+  const mismatch =
+    bothGiven && Math.abs(liters * priceField.value - totalField.value) > Math.max(0.1, totalField.value * 0.01);
+  const NUM_HINT = "Use só números, com vírgula (ex.: 40,5).";
 
   const ok = validateFields([
     { id: "fuelDate", test: () => !!date, message: "Informe a data do abastecimento." },
     { id: "fuelDate", test: () => date <= today(), message: "A data não pode ser no futuro." },
+    { id: "fuelOdo", test: () => !odoField.invalid, message: "Use só números (ex.: 72600)." },
     { id: "fuelOdo", test: () => Number.isFinite(odo) && odo > 0, message: "Informe a KM do painel." },
     {
       id: "fuelOdo",
       test: () => existingFuels.length === 0 || odo > lastOdo,
       message: `A KM precisa ser maior que a do último abastecimento (${lastOdo.toLocaleString("pt-BR")} km).`,
     },
+    { id: "fuelLiters", test: () => !litersField.invalid, message: NUM_HINT },
     {
       id: "fuelLiters",
       test: () => Number.isFinite(liters) && liters > 0,
       message: "Informe quantos litros foram abastecidos.",
     },
+    { id: "fuelPrice", test: () => !priceField.invalid, message: NUM_HINT },
     {
       id: "fuelPrice",
-      test: () => priceRaw === "" || Number(priceRaw) > 0,
+      test: () => priceField.raw === "" || priceField.value > 0,
       message: "O preço por litro deve ser maior que zero (ou deixe em branco).",
+    },
+    { id: "fuelTotal", test: () => !totalField.invalid, message: NUM_HINT },
+    {
+      id: "fuelTotal",
+      test: () => totalField.raw === "" || totalField.value > 0,
+      message: "O total deve ser maior que zero (ou deixe em branco).",
+    },
+    {
+      id: "fuelTotal",
+      test: () => !mismatch,
+      message: `Litros × preço dá ${fmtMoney(liters * priceField.value)}, não ${fmtMoney(totalField.value)}. Corrija um dos três.`,
     },
   ]);
   if (!ok) return;
+  const price = amounts.price;
 
   const fuels = DB.getFuels();
+  const newFuelId = uid();
   fuels.push({
-    id: uid(),
+    id: newFuelId,
     carId: car.id,
     date,
     odometer: odo,
     liters,
     price,
     station,
+    work: car.usage !== "trabalho" && document.getElementById("fuelWork").checked,
     createdAt: Date.now(),
   });
   DB.saveFuels(fuels);
@@ -1328,10 +1634,12 @@ document.getElementById("btnSaveFuel").addEventListener("click", () => {
   document.getElementById("btnClearFuel").click();
   invalidateFuelScreens(); // dashboard + fuel precisam atualizar
   renderFuelScreen();
+  markRow("#fuelHistoryList", newFuelId, "is-new", 2600); // marca-texto passa sobre ele
 });
 
 document.getElementById("btnClearFuel").addEventListener("click", () => {
-  ["fuelDate", "fuelOdo", "fuelLiters", "fuelPrice", "fuelStation"].forEach(
+  document.getElementById("fuelWork").checked = false;
+  ["fuelDate", "fuelOdo", "fuelLiters", "fuelPrice", "fuelTotal", "fuelStation"].forEach(
     (id) => {
       const el = document.getElementById(id);
       el.value = "";
@@ -1343,8 +1651,23 @@ document.getElementById("btnClearFuel").addEventListener("click", () => {
   document.getElementById("calcPreview").style.display = "none";
 });
 
+// Liga/desliga "Trabalho" num registro (retroativo: dá para marcar no fim do mês)
+function toggleWork(kind, id) {
+  const isFuel = kind === "fuel";
+  const list = isFuel ? DB.getFuels() : DB.getMaints();
+  const rec = list.find((r) => r.id === id);
+  if (!rec) return;
+  rec.work = !rec.work;
+  isFuel ? DB.saveFuels(list) : DB.saveMaints(list);
+  markDirty("report");
+  isFuel ? renderFuelScreen() : renderMaintScreen();
+  showToast(rec.work ? "Incluído no relatório de reembolso." : "Fora do relatório de reembolso.", "info");
+}
+
 // Delete fuel (delegated)
 document.getElementById("fuelHistoryList").addEventListener("click", (e) => {
+  const tog = e.target.closest('[data-action="togglework-fuel"]');
+  if (tog) return toggleWork("fuel", tog.dataset.id);
   const btn = e.target.closest('[data-action="deletefuel"]');
   if (!btn) return;
   const before = DB.getFuels();
@@ -1384,48 +1707,27 @@ function renderMaintScreen() {
   }
   emptyEl.style.display = "none";
 
-  const todayStr = today();
-  const in7 = addDays(todayStr, 7);
-  const in30 = addDays(todayStr, 30);
   const usage = carUsage(car, DB.getFuelsForCar(car.id));
+  const personalCar = car.usage !== "trabalho";
 
   const frag = document.createDocumentFragment();
   maints.forEach((m) => {
-    let stripeColor = "var(--accent-green)";
-    let statusLabel = "Agendado";
-
-    if (m.resolved) {
-      stripeColor = "var(--text-muted)";
-      statusLabel = m.doneDate ? `Concluída em ${fmtDate(m.doneDate)}` : "Concluída";
-      statusLabel += m.cost !== null && m.cost !== undefined ? ` · ${fmtMoney(m.cost)}` : " · valor não informado";
-    } else if (m.date < todayStr) {
-      stripeColor = "var(--accent-red)";
-      statusLabel = "Vencida";
-    } else if (m.date <= in7) {
-      stripeColor = "var(--accent-red)";
-      statusLabel = `Faltam ${daysUntil(m.date)}d`;
-    } else if (m.date <= in30) {
-      stripeColor = "var(--accent-amber)";
-      statusLabel = `Em ${daysUntil(m.date)} dias`;
-    }
-    const kmStatus = m.resolved ? null : maintKmStatus(m, usage);
-    if (kmStatus?.overdue && stripeColor !== "var(--accent-red)") {
-      stripeColor = "var(--accent-red)";
-      statusLabel = "KM atingida";
-    }
+    const { level, label: statusLabel, kmStatus } = maintStatus(m, usage);
 
     const item = document.createElement("div");
-    item.className = "maint-list-item";
+    item.className = `maint-list-item maint-list-item--${level}${m.resolved ? " is-done" : ""}`;
+    item.dataset.id = m.id;
     item.innerHTML = `
-      <div class="maint-list-item__stripe" style="background:${stripeColor}"></div>
+      <div class="maint-list-item__stripe"></div>
       <div class="maint-list-item__info">
-        <div class="maint-list-item__type">${esc(m.type)}</div>
+        <div class="maint-list-item__type">${breakable(m.type)}</div>
         <div class="maint-list-item__meta">
           ${icon("calendar")} ${fmtDate(m.date)}
           ${m.km ? ` · ${icon("gauge")} ${parseInt(m.km).toLocaleString("pt-BR")} km${kmStatus && !kmStatus.overdue ? ` · ${kmStatus.text}` : ""}` : ""}
-          · <span style="color:${stripeColor === "var(--accent-red)" ? "var(--accent-red-text)" : stripeColor}">${statusLabel}</span>
-          ${m.notes ? `<br><small style="color:var(--text-muted)">${esc(m.notes)}</small>` : ""}
+          · <span class="maint-status">${esc(statusLabel)}</span>
+          ${m.notes ? `<br><small class="maint-list-item__notes">${esc(m.notes)}</small>` : ""}
         </div>
+        ${personalCar ? `<div class="row-tags">${workToggle("maint", m)}</div>` : ""}
       </div>
       <div class="maint-list-item__actions">
         ${
@@ -1439,6 +1741,31 @@ function renderMaintScreen() {
     frag.appendChild(item);
   });
   list.replaceChildren(emptyEl, frag);
+  renderMaintSummary(maints, usage);
+}
+
+/* Resumo ao lado da agenda (telas largas): quantas em cada estado + gasto do mês */
+function renderMaintSummary(maints, usage) {
+  const box = document.getElementById("maintSummary");
+  const dl = document.getElementById("maintSummaryList");
+  if (!maints.length) {
+    box.hidden = true;
+    return;
+  }
+  const count = { urgent: 0, upcoming: 0, ok: 0 };
+  maints.filter((m) => !m.resolved).forEach((m) => count[maintStatus(m, usage).level]++);
+  const month = today().slice(0, 7);
+  const doneNow = maints.filter((m) => m.resolved && m.doneDate && m.doneDate.startsWith(month));
+  const spent = doneNow.reduce((t, m) => t + (m.cost || 0), 0);
+  const row = (label, value, tone = "") =>
+    `<div class="ledger__row"><dt><span class="ledger__label">${label}</span></dt><dd class="${tone}">${value}</dd></div>`;
+  dl.innerHTML =
+    row("Vencidas ou urgentes", count.urgent, count.urgent ? "tone-urgent" : "") +
+    row("Nos próximos 30 dias", count.upcoming) +
+    row("Em dia", count.ok) +
+    row("Concluídas este mês", doneNow.length) +
+    row("Gasto este mês", doneNow.length ? fmtMoney(spent) : "—");
+  box.hidden = false;
 }
 
 // Show maint form
@@ -1449,6 +1776,7 @@ document.getElementById("btnShowMaintForm").addEventListener("click", () => {
     return;
   }
   document.getElementById("maintFormCard").style.display = "block";
+  document.getElementById("maintWorkField").hidden = car.usage === "trabalho";
   document.getElementById("maintDate").value =
     document.getElementById("maintDate").value || today();
   document
@@ -1463,6 +1791,7 @@ document
   .addEventListener("click", hideMaintForm);
 function hideMaintForm() {
   document.getElementById("maintFormCard").style.display = "none";
+  document.getElementById("maintWork").checked = false;
   ["maintDate", "maintKm", "maintNotes", "maintCustom"].forEach(
     (id) => (document.getElementById(id).value = ""),
   );
@@ -1486,7 +1815,7 @@ document.getElementById("btnSaveMaint").addEventListener("click", () => {
 
   let type = document.getElementById("maintType").value;
   const date = document.getElementById("maintDate").value;
-  const km = document.getElementById("maintKm").value;
+  const kmField = readInteger("maintKm");
   const notes = document.getElementById("maintNotes").value.trim();
 
   const isCustom = type === "Outro";
@@ -1498,10 +1827,11 @@ document.getElementById("btnSaveMaint").addEventListener("click", () => {
   }
   rules.push(
     { id: "maintDate", test: () => !!date, message: "Informe a data prevista." },
+    { id: "maintKm", test: () => !kmField.invalid, message: "Use só números (ex.: 50000)." },
     {
       id: "maintKm",
-      test: () => km === "" || (Number(km) > 0 && Number(km) <= 9999999),
-      message: "A KM prevista deve ser um número positivo (ou deixe em branco).",
+      test: () => kmField.value === null || (kmField.value > 0 && kmField.value <= 9999999),
+      message: "A KM prevista deve ser maior que zero (ou deixe em branco).",
     },
   );
   if (!validateFields(rules)) return;
@@ -1512,7 +1842,8 @@ document.getElementById("btnSaveMaint").addEventListener("click", () => {
     carId: car.id,
     type,
     date,
-    km: km || null,
+    km: kmField.value || null,
+    work: car.usage !== "trabalho" && document.getElementById("maintWork").checked,
     notes,
     resolved: false,
     createdAt: Date.now(),
@@ -1539,8 +1870,8 @@ function openResolveForm(item, id) {
   form.innerHTML = `
     <div class="field">
       <label for="resolveCost-${sid}">Valor (R$) <span class="label-optional">(opcional)</span></label>
-      <input type="number" id="resolveCost-${sid}" min="0" step="any" inputmode="decimal"
-        placeholder="0,00" value="${m.cost !== null && m.cost !== undefined ? m.cost : ""}" />
+      <input type="text" id="resolveCost-${sid}" inputmode="decimal" autocomplete="off"
+        placeholder="Ex.: 280,00" value="${m.cost !== null && m.cost !== undefined ? esc(toField(m.cost, 2)) : ""}" />
     </div>
     <div class="field">
       <label for="resolveDate-${sid}">Data de realização</label>
@@ -1558,12 +1889,13 @@ function saveResolveForm(id) {
   const costEl = document.getElementById(`resolveCost-${id}`);
   const dateEl = document.getElementById(`resolveDate-${id}`);
   if (!costEl || !dateEl) return;
-  const costRaw = costEl.value;
+  const costField = readDecimal(costEl.id);
   const doneDate = dateEl.value;
   const ok = validateFields([
+    { id: costEl.id, test: () => !costField.invalid, message: "Use só números, com vírgula (ex.: 280,50)." },
     {
       id: costEl.id,
-      test: () => costRaw === "" || (Number(costRaw) >= 0 && Number(costRaw) <= 1e6),
+      test: () => costField.value === null || (costField.value >= 0 && costField.value <= 1e6),
       message: "Informe um valor positivo (ou deixe em branco).",
     },
     { id: dateEl.id, test: () => !!doneDate, message: "Informe quando foi feita." },
@@ -1579,11 +1911,12 @@ function saveResolveForm(id) {
     ...maints[idx],
     resolved: true,
     doneDate,
-    cost: costRaw === "" ? null : Math.round(Number(costRaw) * 100) / 100,
+    cost: costField.value === null ? null : Math.round(costField.value * 100) / 100,
   };
   DB.saveMaints(maints);
   invalidateMaintScreens(); // dashboard, manutenção e relatório
   renderMaintScreen();
+  if (!wasResolved) markRow("#maintList", id, "just-done", 800); // a caneta risca a linha
   showToast(wasResolved ? "Manutenção atualizada!" : "Manutenção concluída!");
 }
 
@@ -1606,6 +1939,7 @@ document.getElementById("maintList").addEventListener("click", (e) => {
   if (!btn) return;
   const { action, id } = btn.dataset;
 
+  if (action === "togglework-maint") return toggleWork("maint", id);
   if (action === "resolve") openResolveForm(btn.closest(".maint-list-item"), id);
   if (action === "resolve-cancel") renderMaintScreen();
   if (action === "resolve-save") saveResolveForm(id);
@@ -2329,8 +2663,9 @@ const ReceiptScanner = (() => {
       filled++;
     };
     set("fuelDate", r.date);
-    set("fuelLiters", r.liters !== null ? String(r.liters) : null);
-    set("fuelPrice", r.price !== null ? String(r.price) : null);
+    set("fuelLiters", r.liters !== null ? toField(r.liters, 3) : null);
+    set("fuelPrice", r.price !== null ? toField(r.price, 3) : null);
+    set("fuelTotal", r.total !== null ? toField(r.total, 2) : null);
     set("fuelStation", r.station);
     return filled;
   }
@@ -2437,7 +2772,11 @@ function monthRange(year, monthIndex) {
  */
 function collectReport(car, fuels, maints, from, to) {
   const inRange = (d) => !!d && d >= from && d <= to;
-  const carFuels = fuels.filter((f) => f.carId === car.id);
+  // Veículo de trabalho: tudo conta. Pessoal: só o que foi marcado como "Trabalho".
+  const allWork = car.usage === "trabalho";
+  const counts = (r) => allWork || r.work === true;
+  const allCarFuels = fuels.filter((f) => f.carId === car.id);
+  const carFuels = allCarFuels.filter(counts);
 
   const fuelRows = carFuels
     .filter((f) => inRange(f.date))
@@ -2453,7 +2792,7 @@ function collectReport(car, fuels, maints, from, to) {
     }));
 
   const maintRows = maints
-    .filter((m) => m.carId === car.id && m.resolved && inRange(m.doneDate))
+    .filter((m) => m.carId === car.id && m.resolved && counts(m) && inRange(m.doneDate))
     .map((m) => ({
       kind: "maint",
       date: m.doneDate,
@@ -2475,10 +2814,12 @@ function collectReport(car, fuels, maints, from, to) {
 
   // KM rodados no período: do último abastecimento ANTES do período (se houver)
   // até o último DENTRO dele. Sem anterior, conta a partir do primeiro do período.
-  const byOdo = [...carFuels].sort((a, b) => a.odometer - b.odometer);
+  // Em veículo pessoal só parte dos abastecimentos é de trabalho: o odômetro não
+  // diz quantos km foram a trabalho, então não calcula (null) em vez de inventar.
+  const byOdo = [...allCarFuels].sort((a, b) => a.odometer - b.odometer);
   const inPeriod = byOdo.filter((f) => inRange(f.date));
-  let km = 0;
-  if (inPeriod.length) {
+  let km = allWork ? 0 : null;
+  if (allWork && inPeriod.length) {
     const before = byOdo.filter((f) => f.date < from);
     const start = before.length ? before[before.length - 1].odometer : inPeriod[0].odometer;
     km = Math.max(0, inPeriod[inPeriod.length - 1].odometer - start);
@@ -2491,6 +2832,7 @@ function collectReport(car, fuels, maints, from, to) {
     total: Math.round((fuelTotal + maintTotal) * 100) / 100,
     liters: fuelRows.reduce((s, r) => s + r.liters, 0),
     km,
+    partial: !allWork,
     fuelCount: fuelRows.length,
     maintCount: maintRows.length,
     missingFuel: fuelRows.filter((r) => r.value === null).length,
@@ -2566,7 +2908,11 @@ const Report = (() => {
     }
   }
 
-  const workCars = () => DB.getCars().filter((c) => c.usage === "trabalho");
+  // Veículos de trabalho + pessoais que tenham alguma despesa marcada como "Trabalho"
+  const workCars = () => {
+    const flagged = new Set([...DB.getFuels(), ...DB.getMaints()].filter((r) => r.work).map((r) => r.carId));
+    return DB.getCars().filter((c) => c.usage === "trabalho" || flagged.has(c.id));
+  };
 
   function getPeriod() {
     const mode = document.querySelector('input[name="reportPeriod"]:checked').value;
@@ -2640,7 +2986,8 @@ const Report = (() => {
     const carLine = [car.name, `${car.model} ${car.year}`, car.plate ? `Placa ${car.plate}` : ""]
       .filter(Boolean)
       .join(" · ");
-    $("reportDocMeta").textContent = `${carLine} — ${period.label}`;
+    $("reportDocMeta").textContent =
+      `${carLine} — ${period.label}` + (data.partial ? " · só despesas marcadas como trabalho" : "");
     const profile = loadProfile();
     const idParts = [
       profile.name && `Solicitante: ${profile.name}`,
@@ -2657,7 +3004,10 @@ const Report = (() => {
     $("reportMaintSub").textContent =
       `${data.maintCount} manutenç${data.maintCount !== 1 ? "ões" : "ão"} concluída${data.maintCount !== 1 ? "s" : ""}`;
     $("reportTotal").textContent = fmtMoney(data.total);
-    $("reportTotalSub").textContent = `${data.km.toLocaleString("pt-BR")} km rodados no período`;
+    $("reportTotalSub").textContent =
+      data.km === null
+        ? "km de trabalho não calculados neste veículo"
+        : `${data.km.toLocaleString("pt-BR")} km rodados no período`;
 
     const missing = data.missingFuel + data.missingMaint;
     $("reportWarning").hidden = missing === 0;
@@ -2720,6 +3070,11 @@ const Report = (() => {
     $("reportName").value = profile.name;
     $("reportCompany").value = profile.company;
     $("reportIdFields").hidden = !profile.include;
+
+    // Reembolso costuma ser do mês que acabou: nos primeiros 10 dias, abre em "Mês passado"
+    if (new Date().getDate() <= 10) {
+      document.querySelector('input[name="reportPeriod"][value="last"]').checked = true;
+    }
 
     // Datas do "Personalizado" começam no mês atual
     const now = new Date();
@@ -2827,6 +3182,7 @@ const Backup = (() => {
       liters: num(f.liters, { min: 0.01, max: 10000 }),
       price: num(f.price, { max: 1000, optional: true }),
       station: str(f.station, 60),
+      work: f.work === true,
     };
     const createdAt = ts(f.createdAt);
     if (createdAt !== null) fuel.createdAt = createdAt;
@@ -2841,6 +3197,7 @@ const Backup = (() => {
       km: num(m.km, { max: 1e7, int: true, optional: true }),
       notes: str(m.notes, 500),
       resolved: m.resolved === true,
+      work: m.work === true,
       cost: num(m.cost, { max: 1e6, optional: true }),
       doneDate: m.doneDate === undefined || m.doneDate === null ? null : date(m.doneDate),
     };
@@ -2977,6 +3334,7 @@ const Backup = (() => {
         refreshAllScreens();
         showToast("Backup importado!");
       },
+      { confirmLabel: "Substituir dados" },
     );
   }
 
@@ -2993,7 +3351,7 @@ const Backup = (() => {
     });
   }
 
-  return { init, parseBackup };
+  return { init, parseBackup, exportData };
 })();
 
 /* ═══════════════════════════════
@@ -3016,6 +3374,10 @@ function init() {
     ? initialScreen
     : "dashboard";
 
+  // O Relatório define o período padrão aqui: precisa vir ANTES da primeira renderização
+  // (quando o app abre direto no Relatório, a tela já é desenhada com o período certo)
+  Report.init();
+
   // Navigate to initial screen (handles rendering)
   navigateTo(startScreen);
 
@@ -3024,7 +3386,6 @@ function init() {
 
   Backup.init();
   ReceiptScanner.init();
-  Report.init();
 
   // Pede ao navegador para não apagar o localStorage quando faltar espaço
   if (navigator.storage && navigator.storage.persist) {

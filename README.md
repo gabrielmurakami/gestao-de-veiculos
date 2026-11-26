@@ -13,6 +13,9 @@
 | **⛽ Abastecimento**      | Registro de abastecimentos com data, KM, litros, preço/litro e posto; cálculo automático de km/l por trecho e total gasto                              |
 | **🔧 Manutenção**         | Agendamento por tipo (troca de óleo, revisão, pneus, freios, etc.), data/KM prevista, observações; status visual (vencido, próximo, em dia, concluído) |
 | **📈 Gráfico de Consumo** | Linha temporal do km/l por abastecimento (requer 2+ registros), usando Chart.js                                                                        |
+| **🧾 Relatório**          | Prestação de contas do veículo de trabalho (ou de despesas avulsas marcadas como trabalho): período, totais, lista, impressão/PDF e planilha CSV                      |
+| **📷 Ler recibo**         | Foto do cupom do posto preenchendo data, litros, preço e posto (OCR no próprio aparelho; a foto não sai dele)                                           |
+| **♻️ Backup**             | Exportar e importar os dados em arquivo JSON validado; exclusões podem ser desfeitas                                                                     |
 | **💾 Persistência Local** | Tudo salvo no `localStorage` — funciona offline, sem servidor                                                                                          |
 
 ---
@@ -79,11 +82,11 @@ xdg-open index.html
 | Camada           | Tecnologia                                                                   |
 | ---------------- | ---------------------------------------------------------------------------- |
 | **HTML**         | Semântico, acessível, mobile-first                                           |
-| **CSS**          | Custom Properties (tokens), Grid/Flexbox, design system "Cockpit" dark theme |
+| **CSS**          | Custom Properties (tokens), Grid/Flexbox, design system "O Caderno do Motorista" (ver `DESIGN.md`) |
 | **JS**           | Vanilla ES6+ (modules pattern), sem dependências de build                    |
-| **Gráficos**     | [Chart.js v4](https://www.chartjs.org/) via CDN (UMD)                        |
+| **Gráficos**     | [Chart.js v4](https://www.chartjs.org/) hospedado no próprio site, carregado sob demanda |
 | **Persistência** | `localStorage` (chaves: `ag_cars`, `ag_fuels`, `ag_maints`, `ag_selected`)   |
-| **Fontes**       | Inter (Google Fonts)                                                         |
+| **Fontes**       | Instrument Sans e Nunito (OFL), hospedadas em `assets/fonts/`      |
 
 ---
 
@@ -99,41 +102,36 @@ gestao-de-veiculos/
 
 ---
 
-## 🎨 Design System (Tokens CSS)
+## 🎨 Design System
+
+O sistema visual completo ("O Caderno do Motorista": paleta, tipografia, movimento e regras) está em [`DESIGN.md`](DESIGN.md). Os tokens principais:
 
 ```css
 :root {
-  /* Cores base */
-  --bg-deep: #0a1520;
-  --bg-base: #0f1e2e;
-  --bg-surface: #162436;
-  --bg-raised: #1d2f42;
-  --bg-hover: #243650;
+  /* Tinta (fundos em camadas) */
+  --bg-deep: #0b0c0e;
+  --bg-surface: #141619;
+  --bg-raised: #1b1e22;
 
-  /* Acentos */
-  --accent-blue: #3b82f6;
-  --accent-blue2: #2563eb;
-  --accent-amber: #f59e0b;
-  --accent-green: #10b981;
-  --accent-red: #ef4444;
+  /* Azul: o único acento */
+  --accent: #60a5fa;
+  --accent-strong: #2563eb; /* botão primário, texto branco */
 
-  /* Texto */
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #8196b3;
+  /* Texto cor de papel */
+  --text-primary: #ecebe4;
+  --text-secondary: #a9a89f;
+  --text-muted: #8f8e86;
 
-  /* Espaçamento & Bordas */
-  --gap: 16px;
-  --radius: 10px;
-  --radius-sm: 6px;
-  --sidebar-w: 220px;
+  /* Movimento */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 
   /* Tipografia */
-  --font: "Inter", system-ui, sans-serif;
+  --font: "Instrument Sans", system-ui, sans-serif;
+  --font-display: "Nunito", system-ui, sans-serif;
 }
 ```
 
-> O tema é **dark-only** inspirado em painéis industriais/cockpit — alto contraste, hierarquia clara, feedback visual imediato.
+> O tema é **sempre escuro**: tinta escura, texto cor de papel e um único acento.
 
 ---
 
